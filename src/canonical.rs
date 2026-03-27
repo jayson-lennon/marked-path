@@ -85,7 +85,7 @@ impl CanonicalPath {
     }
 
     /// Consumes this `CanonicalPath` and returns the inner [`MarkedPath<Absolute>`].
-    pub(crate) fn into_marked(self) -> MarkedPath<Absolute> {
+    pub fn into_marked(self) -> MarkedPath<Absolute> {
         self.0
     }
 }
