@@ -5,7 +5,7 @@
 //! is [`Absolute`] or [`Relative`]. It also provides [`CanonicalPath`], which
 //! guarantees a fully resolved, existing filesystem path.
 //!
-//! Errors are reported as [`error_stack::Report<PathError>`].
+//! Errors are reported as [`PathError`].
 //!
 //! # Example
 //!
@@ -16,7 +16,7 @@
 //! let abs = MarkedPath::<Absolute>::new(PathBuf::from("/home/user"))?;
 //! let rel = MarkedPath::<Relative>::new(PathBuf::from("documents/file.txt"))?;
 //!
-//! # Ok::<(), error_stack::Report<marked_path::PathError>>(())
+//! # Ok::<(), marked_path::PathError>(())
 //! ```
 
 mod marked_path;

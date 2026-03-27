@@ -4,7 +4,6 @@ use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use error_stack::{Report, ResultExt};
 use wherror::Error;
 
 /// Error type for path operations.
@@ -12,8 +11,23 @@ use wherror::Error;
 /// This error is returned when a path operation fails, such as attempting to
 /// create a `MarkedPath<Absolute>` from a relative path, or vice versa.
 #[derive(Debug, Error)]
-#[error(debug)]
-pub struct PathError;
+pub enum PathError {
+    /// The path was expected to be absolute but was relative.
+    #[error("path is not absolute")]
+    NotAbsolute,
+
+    /// The path was expected to be relative but was absolute.
+    #[error("path is not relative")]
+    NotRelative,
+
+    /// The path is not in canonical form (contains `.`, `..`, or is a symlink).
+    #[error("path is not in canonical form")]
+    NotCanonical,
+
+    /// An I/O error occurred during path operations.
+    #[error("I/O error: {0}")]
+    Io(#[from] std::io::Error),
+}
 
 /// Marker type for absolute paths.
 ///
@@ -59,7 +73,7 @@ pub struct Relative;
 /// // You can push relative paths onto absolute paths
 /// let mut abs = MarkedPath::<Absolute>::new(PathBuf::from("/home"))?;
 /// abs.push_path(&rel);
-/// # Ok::<(), error_stack::Report<marked_path::PathError>>(())
+/// # Ok::<(), marked_path::PathError>(())
 /// ```
 #[derive(Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct MarkedPath<M> {
@@ -89,7 +103,7 @@ impl<M> AsRef<Path> for MarkedPath<M> {
 }
 
 impl FromStr for MarkedPath<Absolute> {
-    type Err = Report<PathError>;
+    type Err = PathError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let path = PathBuf::from(s);
@@ -98,7 +112,7 @@ impl FromStr for MarkedPath<Absolute> {
 }
 
 impl FromStr for MarkedPath<Relative> {
-    type Err = Report<PathError>;
+    type Err = PathError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let path = PathBuf::from(s);
@@ -135,14 +149,14 @@ impl MarkedPath<Absolute> {
     /// # Errors
     ///
     /// Returns a [`PathError`] if the path is not absolute.
-    pub fn new(path: PathBuf) -> Result<Self, Report<PathError>> {
+    pub fn new(path: PathBuf) -> Result<Self, PathError> {
         if path.is_absolute() {
             Ok(Self {
                 path,
                 _marker: PhantomData,
             })
         } else {
-            Err(Report::new(PathError))
+            Err(PathError::NotAbsolute)
         }
     }
 
@@ -152,8 +166,8 @@ impl MarkedPath<Absolute> {
     ///
     /// Returns a [`PathError`] if the path cannot be canonicalized
     /// (e.g., if it doesn't exist or there are permission issues).
-    pub fn canonicalize(&self) -> Result<CanonicalPath, Report<PathError>> {
-        let canonicalized = self.path.canonicalize().change_context(PathError)?;
+    pub fn canonicalize(&self) -> Result<CanonicalPath, PathError> {
+        let canonicalized = self.path.canonicalize()?;
         CanonicalPath::new(canonicalized)
     }
 
@@ -169,14 +183,14 @@ impl MarkedPath<Relative> {
     /// # Errors
     ///
     /// Returns a [`PathError`] if the path is not relative (i.e., if it's absolute).
-    pub fn new(path: PathBuf) -> Result<Self, Report<PathError>> {
+    pub fn new(path: PathBuf) -> Result<Self, PathError> {
         if path.is_relative() {
             Ok(Self {
                 path,
                 _marker: PhantomData,
             })
         } else {
-            Err(Report::new(PathError))
+            Err(PathError::NotRelative)
         }
     }
 
@@ -209,7 +223,7 @@ impl MarkedPath<Relative> {
 /// // Create from an existing path
 /// let canonical = CanonicalPath::from_path(Path::new("/etc/hosts"))?;
 /// println!("Canonical path: {}", canonical.as_path().display());
-/// # Ok::<(), error_stack::Report<marked_path::PathError>>(())
+/// # Ok::<(), marked_path::PathError>(())
 /// ```
 #[derive(Debug, PartialOrd, Ord)]
 pub struct CanonicalPath(MarkedPath<Absolute>);
@@ -228,10 +242,10 @@ impl CanonicalPath {
     /// Returns a [`PathError`] if:
     /// - The path does not exist
     /// - The path is not in canonical form (contains `.`, `..`, or is a symlink)
-    pub fn new(path: PathBuf) -> Result<Self, Report<PathError>> {
-        let canonicalized = path.canonicalize().change_context(PathError)?;
+    pub fn new(path: PathBuf) -> Result<Self, PathError> {
+        let canonicalized = path.canonicalize()?;
         if canonicalized != path {
-            return Err(Report::new(PathError).attach("path is not in canonical form"));
+            return Err(PathError::NotCanonical);
         }
         Ok(Self(MarkedPath {
             path,
@@ -245,8 +259,8 @@ impl CanonicalPath {
     ///
     /// Returns a [`PathError`] if the path cannot be canonicalized
     /// (e.g., if it doesn't exist or if there are permission issues).
-    pub fn from_path(path: &Path) -> Result<Self, Report<PathError>> {
-        let canonicalized = path.canonicalize().change_context(PathError)?;
+    pub fn from_path(path: &Path) -> Result<Self, PathError> {
+        let canonicalized = path.canonicalize()?;
         CanonicalPath::new(canonicalized)
     }
 

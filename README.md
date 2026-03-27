@@ -33,7 +33,7 @@ let rel = MarkedPath::<Relative>::new(PathBuf::from("documents/file.txt"))?;
 // You can push relative paths onto absolute paths
 let mut abs = MarkedPath::<Absolute>::new(PathBuf::from("/home"))?;
 abs.push_path(&rel);
-# Ok::<(), error_stack::Report<marked_path::PathError>>(())
+# Ok::<(), marked_path::PathError>(())
 ```
 
 ## License
