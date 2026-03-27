@@ -21,7 +21,10 @@ impl MarkedPath<Absolute> {
     /// # Errors
     ///
     /// Returns a [`PathError`] if the path is not absolute.
-    pub fn new<P: Into<PathBuf>>(path: P) -> Result<Self, PathError> {
+    pub fn new<P>(path: P) -> Result<Self, PathError>
+    where
+        P: Into<PathBuf>,
+    {
         let path = path.into();
         if path.is_absolute() {
             Ok(Self {

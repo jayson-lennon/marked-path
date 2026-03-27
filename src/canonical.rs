@@ -47,7 +47,10 @@ impl CanonicalPath {
     /// Returns a [`PathError`] if:
     /// - The path does not exist
     /// - The path is not in canonical form (contains `.`, `..`, or is a symlink)
-    pub fn new<P: Into<PathBuf>>(path: P) -> Result<Self, PathError> {
+    pub fn new<P>(path: P) -> Result<Self, PathError>
+    where
+        P: Into<PathBuf>,
+    {
         let path = path.into();
         let canonicalized = path.canonicalize()?;
         if canonicalized != path {

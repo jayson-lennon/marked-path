@@ -18,7 +18,10 @@ impl MarkedPath<Relative> {
     /// # Errors
     ///
     /// Returns a [`PathError`] if the path is not relative (i.e., if it's absolute).
-    pub fn new<P: Into<PathBuf>>(path: P) -> Result<Self, PathError> {
+    pub fn new<P>(path: P) -> Result<Self, PathError>
+    where
+        P: Into<PathBuf>,
+    {
         let path = path.into();
         if path.is_relative() {
             Ok(Self {
