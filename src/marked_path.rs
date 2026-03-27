@@ -278,14 +278,6 @@ impl CanonicalPath {
     pub fn into_inner(self) -> PathBuf {
         self.0.into_inner()
     }
-
-    /// Appends a relative path to this canonical path.
-    ///
-    /// Note: After calling this method, the path may no longer be canonical
-    /// (it could contain `.` or `..` components).
-    pub fn push_path(&mut self, other: &MarkedPath<Relative>) {
-        self.0.push_path(other);
-    }
 }
 
 impl PartialEq for CanonicalPath {
@@ -478,16 +470,6 @@ mod tests {
         let expected = temp_file.path().to_path_buf();
         let canonical = CanonicalPath::from_path(temp_file.path()).unwrap();
         assert_eq!(canonical.into_inner(), expected);
-    }
-
-    #[rstest]
-    fn canonical_path_push_path() {
-        let temp_file = NamedTempFile::new().unwrap();
-        let mut canonical = CanonicalPath::from_path(temp_file.path()).unwrap();
-        let relative = MarkedPath::<Relative>::new(PathBuf::from("subdir/file.txt")).unwrap();
-        let before = canonical.as_path().to_path_buf();
-        canonical.push_path(&relative);
-        assert_ne!(canonical.as_path(), before);
     }
 
     #[rstest]
