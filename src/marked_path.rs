@@ -72,7 +72,7 @@ pub struct Relative;
 ///
 /// // You can push relative paths onto absolute paths
 /// let mut abs = MarkedPath::<Absolute>::new(PathBuf::from("/home"))?;
-/// abs.push_path(&rel);
+/// abs.push(&rel);
 /// # Ok::<(), marked_path::PathError>(())
 /// ```
 #[derive(Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
@@ -172,7 +172,7 @@ impl MarkedPath<Absolute> {
     }
 
     /// Appends a relative path to this absolute path.
-    pub fn push_path(&mut self, other: &MarkedPath<Relative>) {
+    pub fn push(&mut self, other: &MarkedPath<Relative>) {
         self.path.push(&other.path);
     }
 }
@@ -195,7 +195,7 @@ impl MarkedPath<Relative> {
     }
 
     /// Appends another relative path to this relative path.
-    pub fn push_path(&mut self, other: &MarkedPath<Relative>) {
+    pub fn push(&mut self, other: &MarkedPath<Relative>) {
         self.path.push(&other.path);
     }
 }
@@ -380,7 +380,7 @@ mod tests {
         let relative = MarkedPath::<Relative>::new(PathBuf::from("subdir/file.txt")).unwrap();
 
         // When pushing the relative path onto the absolute path.
-        absolute.push_path(&relative);
+        absolute.push(&relative);
 
         // Then the path is the combined result.
         let expected = if cfg!(windows) {
@@ -398,7 +398,7 @@ mod tests {
         let other = MarkedPath::<Relative>::new(PathBuf::from("subdir/file.txt")).unwrap();
 
         // When pushing one path onto the other.
-        base.push_path(&other);
+        base.push(&other);
 
         // Then the path is the combined result.
         assert_eq!(base.as_path(), Path::new("base/subdir/file.txt"));
