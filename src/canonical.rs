@@ -68,8 +68,11 @@ impl CanonicalPath {
     ///
     /// Returns a [`PathError`] if the path cannot be canonicalized
     /// (e.g., if it doesn't exist or if there are permission issues).
-    pub fn from_path(path: &Path) -> Result<Self, PathError> {
-        let canonicalized = path.canonicalize()?;
+    pub fn from_path<P>(path: P) -> Result<Self, PathError>
+    where
+        P: AsRef<Path>,
+    {
+        let canonicalized = path.as_ref().canonicalize()?;
         CanonicalPath::new(canonicalized)
     }
 
