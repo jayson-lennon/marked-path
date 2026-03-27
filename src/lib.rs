@@ -10,11 +10,10 @@
 //! # Example
 //!
 //! ```
-//! use std::path::PathBuf;
 //! use marked_path::{Absolute, MarkedPath, Relative};
 //!
-//! let abs = MarkedPath::<Absolute>::new(PathBuf::from("/home/user"))?;
-//! let rel = MarkedPath::<Relative>::new(PathBuf::from("documents/file.txt"))?;
+//! let abs = MarkedPath::<Absolute>::new("/home/user")?;
+//! let rel = MarkedPath::<Relative>::new("documents/file.txt")?;
 //!
 //! # Ok::<(), marked_path::PathError>(())
 //! ```

@@ -21,7 +21,8 @@ impl MarkedPath<Absolute> {
     /// # Errors
     ///
     /// Returns a [`PathError`] if the path is not absolute.
-    pub fn new(path: PathBuf) -> Result<Self, PathError> {
+    pub fn new<P: Into<PathBuf>>(path: P) -> Result<Self, PathError> {
+        let path = path.into();
         if path.is_absolute() {
             Ok(Self {
                 path,
@@ -53,8 +54,7 @@ impl FromStr for MarkedPath<Absolute> {
     type Err = PathError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let path = PathBuf::from(s);
-        Self::new(path)
+        Self::new(s)
     }
 }
 

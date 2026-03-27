@@ -43,17 +43,16 @@ pub enum PathError {
 /// # Example
 ///
 /// ```
-/// use std::path::PathBuf;
 /// use marked_path::{MarkedPath, Absolute, Relative};
 ///
 /// // Create an absolute path (validated at construction)
-/// let abs = MarkedPath::<Absolute>::new(PathBuf::from("/home/user"))?;
+/// let abs = MarkedPath::<Absolute>::new("/home/user")?;
 ///
 /// // Create a relative path
-/// let rel = MarkedPath::<Relative>::new(PathBuf::from("documents/file.txt"))?;
+/// let rel = MarkedPath::<Relative>::new("documents/file.txt")?;
 ///
 /// // You can push relative paths onto absolute paths
-/// let mut abs = MarkedPath::<Absolute>::new(PathBuf::from("/home"))?;
+/// let mut abs = MarkedPath::<Absolute>::new("/home")?;
 /// abs.push(&rel);
 /// # Ok::<(), marked_path::PathError>(())
 /// ```
