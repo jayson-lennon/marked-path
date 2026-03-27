@@ -446,4 +446,88 @@ mod tests {
         // Then they are equal and both hash to the same value.
         assert!(set.contains(&canonical2));
     }
+
+    #[rstest]
+    fn marked_path_display() {
+        let path = MarkedPath::<Relative>::new(PathBuf::from("some/relative/path")).unwrap();
+        assert_eq!(format!("{}", path), "some/relative/path");
+    }
+
+    #[rstest]
+    fn marked_path_to_path_buf() {
+        let path = MarkedPath::<Relative>::new(PathBuf::from("some/relative/path")).unwrap();
+        assert_eq!(path.to_path_buf(), PathBuf::from("some/relative/path"));
+    }
+
+    #[rstest]
+    fn marked_path_into_inner() {
+        let path = MarkedPath::<Relative>::new(PathBuf::from("some/relative/path")).unwrap();
+        assert_eq!(path.into_inner(), PathBuf::from("some/relative/path"));
+    }
+
+    #[rstest]
+    fn canonical_path_to_path_buf() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let canonical = CanonicalPath::from_path(temp_file.path()).unwrap();
+        assert_eq!(canonical.to_path_buf(), temp_file.path().to_path_buf());
+    }
+
+    #[rstest]
+    fn canonical_path_into_inner() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let expected = temp_file.path().to_path_buf();
+        let canonical = CanonicalPath::from_path(temp_file.path()).unwrap();
+        assert_eq!(canonical.into_inner(), expected);
+    }
+
+    #[rstest]
+    fn canonical_path_push_path() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let mut canonical = CanonicalPath::from_path(temp_file.path()).unwrap();
+        let relative = MarkedPath::<Relative>::new(PathBuf::from("subdir/file.txt")).unwrap();
+        let before = canonical.as_path().to_path_buf();
+        canonical.push_path(&relative);
+        assert_ne!(canonical.as_path(), before);
+    }
+
+    #[rstest]
+    fn canonical_path_not_equal_different_paths() {
+        let temp_file1 = NamedTempFile::new().unwrap();
+        let temp_file2 = NamedTempFile::new().unwrap();
+        let canonical1 = CanonicalPath::from_path(temp_file1.path()).unwrap();
+        let canonical2 = CanonicalPath::from_path(temp_file2.path()).unwrap();
+        assert_ne!(canonical1, canonical2);
+    }
+
+    #[rstest]
+    fn canonical_path_hash_different_paths() {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+
+        let temp_file1 = NamedTempFile::new().unwrap();
+        let temp_file2 = NamedTempFile::new().unwrap();
+        let canonical1 = CanonicalPath::from_path(temp_file1.path()).unwrap();
+        let canonical2 = CanonicalPath::from_path(temp_file2.path()).unwrap();
+
+        let mut hasher1 = DefaultHasher::new();
+        canonical1.hash(&mut hasher1);
+        let hash1 = hasher1.finish();
+
+        let mut hasher2 = DefaultHasher::new();
+        canonical2.hash(&mut hasher2);
+        let hash2 = hasher2.finish();
+
+        assert_ne!(
+            hash1, hash2,
+            "different canonical paths should produce different hashes"
+        );
+    }
+
+    #[rstest]
+    fn canonical_path_into_pathbuf() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let canonical = CanonicalPath::from_path(temp_file.path()).unwrap();
+        let pathbuf: PathBuf = canonical.into();
+        assert_eq!(pathbuf, temp_file.path().to_path_buf());
+    }
 }

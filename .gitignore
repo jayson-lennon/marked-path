@@ -18,4 +18,5 @@
 coverage.lcov
 debt.json
 /mutants.out
+/mutants.out.old
 
