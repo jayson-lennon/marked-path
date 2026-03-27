@@ -19,6 +19,12 @@
 //! # Ok::<(), marked_path::PathError>(())
 //! ```
 
+mod absolute;
+mod canonical;
 mod marked_path;
+mod relative;
 
-pub use marked_path::{Absolute, CanonicalPath, MarkedPath, PathError, Relative};
+pub use absolute::Absolute;
+pub use canonical::CanonicalPath;
+pub use marked_path::{MarkedPath, PathError};
+pub use relative::Relative;

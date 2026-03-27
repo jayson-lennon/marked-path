@@ -1,8 +1,7 @@
 use std::fmt;
-use std::hash::{Hash, Hasher};
+use std::hash::Hash;
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
 
 use wherror::Error;
 
@@ -29,23 +28,6 @@ pub enum PathError {
     Io(#[from] std::io::Error),
 }
 
-/// Marker type for absolute paths.
-///
-/// This is a phantom marker type used with [`MarkedPath`] to indicate that
-/// the contained path is guaranteed to be absolute. An absolute path starts
-/// from the root of the filesystem (e.g., `/path/to/file` on Unix or
-/// `C:\path\to\file` on Windows).
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Absolute;
-
-/// Marker type for relative paths.
-///
-/// This is a phantom marker type used with [`MarkedPath`] to indicate that
-/// the contained path is guaranteed to be relative. A relative path does not
-/// start from the root of the filesystem (e.g., `path/to/file`).
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Relative;
-
 /// A type-safe path wrapper with an absolute/relative marker.
 ///
 /// This struct provides compile-time guarantees about whether a path is
@@ -55,8 +37,8 @@ pub struct Relative;
 /// # Type Parameters
 ///
 /// * `M` - A marker type indicating the path's nature:
-///   - [`Absolute`]: The path is guaranteed to be absolute
-///   - [`Relative`]: The path is guaranteed to be relative
+///   - [`Absolute`](crate::Absolute): The path is guaranteed to be absolute
+///   - [`Relative`](crate::Relative): The path is guaranteed to be relative
 ///
 /// # Example
 ///
@@ -77,8 +59,8 @@ pub struct Relative;
 /// ```
 #[derive(Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct MarkedPath<M> {
-    path: PathBuf,
-    _marker: PhantomData<M>,
+    pub(crate) path: PathBuf,
+    pub(crate) _marker: PhantomData<M>,
 }
 
 impl<M> Clone for MarkedPath<M> {
@@ -102,30 +84,6 @@ impl<M> AsRef<Path> for MarkedPath<M> {
     }
 }
 
-impl FromStr for MarkedPath<Absolute> {
-    type Err = PathError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let path = PathBuf::from(s);
-        Self::new(path)
-    }
-}
-
-impl FromStr for MarkedPath<Relative> {
-    type Err = PathError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let path = PathBuf::from(s);
-        Self::new(path)
-    }
-}
-
-impl From<CanonicalPath> for MarkedPath<Absolute> {
-    fn from(value: CanonicalPath) -> Self {
-        value.0
-    }
-}
-
 impl<M> MarkedPath<M> {
     /// Returns a reference to the underlying [`Path`].
     pub fn as_path(&self) -> &Path {
@@ -143,373 +101,36 @@ impl<M> MarkedPath<M> {
     }
 }
 
-impl MarkedPath<Absolute> {
-    /// Creates a new `MarkedPath<Absolute>` from the given path.
-    ///
-    /// # Errors
-    ///
-    /// Returns a [`PathError`] if the path is not absolute.
-    pub fn new(path: PathBuf) -> Result<Self, PathError> {
-        if path.is_absolute() {
-            Ok(Self {
-                path,
-                _marker: PhantomData,
-            })
-        } else {
-            Err(PathError::NotAbsolute)
-        }
-    }
-
-    /// Canonicalizes this absolute path, returning a [`CanonicalPath`].
-    ///
-    /// # Errors
-    ///
-    /// Returns a [`PathError`] if the path cannot be canonicalized
-    /// (e.g., if it doesn't exist or there are permission issues).
-    pub fn canonicalize(&self) -> Result<CanonicalPath, PathError> {
-        let canonicalized = self.path.canonicalize()?;
-        CanonicalPath::new(canonicalized)
-    }
-
-    /// Appends a relative path to this absolute path.
-    pub fn push(&mut self, other: &MarkedPath<Relative>) {
-        self.path.push(&other.path);
-    }
-}
-
-impl MarkedPath<Relative> {
-    /// Creates a new `MarkedPath<Relative>` from the given path.
-    ///
-    /// # Errors
-    ///
-    /// Returns a [`PathError`] if the path is not relative (i.e., if it's absolute).
-    pub fn new(path: PathBuf) -> Result<Self, PathError> {
-        if path.is_relative() {
-            Ok(Self {
-                path,
-                _marker: PhantomData,
-            })
-        } else {
-            Err(PathError::NotRelative)
-        }
-    }
-
-    /// Appends another relative path to this relative path.
-    pub fn push(&mut self, other: &MarkedPath<Relative>) {
-        self.path.push(&other.path);
-    }
-}
-
-/// A wrapper for canonicalized absolute paths.
-///
-/// This type represents a path that has been resolved to its canonical form:
-/// it is guaranteed to be absolute, with all `.` and `..` components resolved,
-/// and all symbolic links followed. The path must exist on the filesystem
-/// at the time of construction.
-///
-/// # Type Safety
-///
-/// A `CanonicalPath` provides stronger guarantees than [`MarkedPath<Absolute>`]:
-/// - The path is absolute and fully resolved
-/// - The path existed at construction time
-/// - The path can be safely used for comparisons (no `.` or `..` ambiguity)
-///
-/// # Example
-///
-/// ```
-/// use std::path::Path;
-/// use marked_path::CanonicalPath;
-///
-/// // Create from an existing path
-/// let canonical = CanonicalPath::from_path(Path::new("/etc/hosts"))?;
-/// println!("Canonical path: {}", canonical.as_path().display());
-/// # Ok::<(), marked_path::PathError>(())
-/// ```
-#[derive(Debug, PartialOrd, Ord)]
-pub struct CanonicalPath(MarkedPath<Absolute>);
-
-impl Clone for CanonicalPath {
-    fn clone(&self) -> Self {
-        Self(self.0.clone())
-    }
-}
-
-impl CanonicalPath {
-    /// Creates a new `CanonicalPath` from a path, validating it is canonical.
-    ///
-    /// # Errors
-    ///
-    /// Returns a [`PathError`] if:
-    /// - The path does not exist
-    /// - The path is not in canonical form (contains `.`, `..`, or is a symlink)
-    pub fn new(path: PathBuf) -> Result<Self, PathError> {
-        let canonicalized = path.canonicalize()?;
-        if canonicalized != path {
-            return Err(PathError::NotCanonical);
-        }
-        Ok(Self(MarkedPath {
-            path,
-            _marker: PhantomData,
-        }))
-    }
-
-    /// Creates a `CanonicalPath` by canonicalizing the given path.
-    ///
-    /// # Errors
-    ///
-    /// Returns a [`PathError`] if the path cannot be canonicalized
-    /// (e.g., if it doesn't exist or if there are permission issues).
-    pub fn from_path(path: &Path) -> Result<Self, PathError> {
-        let canonicalized = path.canonicalize()?;
-        CanonicalPath::new(canonicalized)
-    }
-
-    /// Returns a reference to the underlying [`Path`].
-    pub fn as_path(&self) -> &Path {
-        self.0.as_path()
-    }
-
-    /// Returns a clone of the underlying [`PathBuf`].
-    pub fn to_path_buf(&self) -> PathBuf {
-        self.0.to_path_buf()
-    }
-
-    /// Consumes this `CanonicalPath` and returns the underlying [`PathBuf`].
-    pub fn into_inner(self) -> PathBuf {
-        self.0.into_inner()
-    }
-}
-
-impl PartialEq for CanonicalPath {
-    fn eq(&self, other: &Self) -> bool {
-        self.0.path == other.0.path
-    }
-}
-
-impl Eq for CanonicalPath {}
-
-impl Hash for CanonicalPath {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.0.path.hash(state);
-    }
-}
-
-impl AsRef<Path> for CanonicalPath {
-    fn as_ref(&self) -> &Path {
-        self.as_path()
-    }
-}
-
-impl From<CanonicalPath> for PathBuf {
-    fn from(value: CanonicalPath) -> Self {
-        value.into_inner()
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::relative::Relative;
     use rstest::rstest;
-    use tempfile::NamedTempFile;
-
-    #[rstest]
-    fn absolute_new_accepts_absolute_path() {
-        // Given an absolute path.
-        let path = if cfg!(windows) {
-            PathBuf::from("C:\\some\\path")
-        } else {
-            PathBuf::from("/some/path")
-        };
-
-        // When creating a marked path.
-        let result = MarkedPath::<Absolute>::new(path);
-
-        // Then the result is ok.
-        assert!(result.is_ok());
-    }
-
-    #[rstest]
-    fn absolute_new_rejects_relative_path() {
-        // Given a relative path.
-        let path = PathBuf::from("some/relative/path");
-
-        // When creating an absolute marked path.
-        let result = MarkedPath::<Absolute>::new(path);
-
-        // Then the result is an error.
-        assert!(result.is_err());
-    }
-
-    #[rstest]
-    fn relative_new_accepts_relative_path() {
-        // Given a relative path.
-        let path = PathBuf::from("some/relative/path");
-
-        // When creating a relative marked path.
-        let result = MarkedPath::<Relative>::new(path);
-
-        // Then the result is ok.
-        assert!(result.is_ok());
-    }
-
-    #[rstest]
-    fn relative_new_rejects_absolute_path() {
-        // Given an absolute path.
-        let path = if cfg!(windows) {
-            PathBuf::from("C:\\some\\path")
-        } else {
-            PathBuf::from("/some/path")
-        };
-
-        // When creating a relative marked path.
-        let result = MarkedPath::<Relative>::new(path);
-
-        // Then the result is an error.
-        assert!(result.is_err());
-    }
-
-    #[rstest]
-    fn push_path_on_absolute_accepts_relative() {
-        // Given an absolute marked path and a relative marked path.
-        let base_path = if cfg!(windows) {
-            PathBuf::from("C:\\base")
-        } else {
-            PathBuf::from("/base")
-        };
-        let mut absolute = MarkedPath::<Absolute>::new(base_path).unwrap();
-        let relative = MarkedPath::<Relative>::new(PathBuf::from("subdir/file.txt")).unwrap();
-
-        // When pushing the relative path onto the absolute path.
-        absolute.push(&relative);
-
-        // Then the path is the combined result.
-        let expected = if cfg!(windows) {
-            "C:\\base\\subdir\\file.txt"
-        } else {
-            "/base/subdir/file.txt"
-        };
-        assert_eq!(absolute.as_path(), Path::new(expected));
-    }
-
-    #[rstest]
-    fn push_path_on_relative_accepts_relative() {
-        // Given two relative marked paths.
-        let mut base = MarkedPath::<Relative>::new(PathBuf::from("base")).unwrap();
-        let other = MarkedPath::<Relative>::new(PathBuf::from("subdir/file.txt")).unwrap();
-
-        // When pushing one path onto the other.
-        base.push(&other);
-
-        // Then the path is the combined result.
-        assert_eq!(base.as_path(), Path::new("base/subdir/file.txt"));
-    }
-
-    #[rstest]
-    fn canonical_path_from_existing_file() {
-        // Given an existing file.
-        let temp_file = NamedTempFile::new().unwrap();
-        let path = temp_file.path();
-
-        // When creating a canonical path from the file path.
-        let canonical = CanonicalPath::from_path(path);
-
-        // Then the result is ok and the path is absolute.
-        assert!(canonical.is_ok());
-        let canonical = canonical.unwrap();
-        assert!(canonical.as_path().is_absolute());
-    }
-
-    #[rstest]
-    fn canonical_path_hash_and_eq() {
-        // Given two canonical paths to the same file.
-        use std::collections::HashSet;
-
-        let temp_file = NamedTempFile::new().unwrap();
-        let path = temp_file.path();
-        let canonical1 = CanonicalPath::from_path(path).unwrap();
-        let canonical2 = CanonicalPath::from_path(path).unwrap();
-
-        // When comparing them and using in a HashSet.
-        assert_eq!(canonical1, canonical2);
-
-        let mut set = HashSet::new();
-        set.insert(canonical1.clone());
-
-        // Then they are equal and both hash to the same value.
-        assert!(set.contains(&canonical2));
-    }
 
     #[rstest]
     fn marked_path_display() {
-        let path = MarkedPath::<Relative>::new(PathBuf::from("some/relative/path")).unwrap();
+        let path =
+            MarkedPath::<Relative>::new(std::path::PathBuf::from("some/relative/path")).unwrap();
         assert_eq!(format!("{}", path), "some/relative/path");
     }
 
     #[rstest]
     fn marked_path_to_path_buf() {
-        let path = MarkedPath::<Relative>::new(PathBuf::from("some/relative/path")).unwrap();
-        assert_eq!(path.to_path_buf(), PathBuf::from("some/relative/path"));
-    }
-
-    #[rstest]
-    fn marked_path_into_inner() {
-        let path = MarkedPath::<Relative>::new(PathBuf::from("some/relative/path")).unwrap();
-        assert_eq!(path.into_inner(), PathBuf::from("some/relative/path"));
-    }
-
-    #[rstest]
-    fn canonical_path_to_path_buf() {
-        let temp_file = NamedTempFile::new().unwrap();
-        let canonical = CanonicalPath::from_path(temp_file.path()).unwrap();
-        assert_eq!(canonical.to_path_buf(), temp_file.path().to_path_buf());
-    }
-
-    #[rstest]
-    fn canonical_path_into_inner() {
-        let temp_file = NamedTempFile::new().unwrap();
-        let expected = temp_file.path().to_path_buf();
-        let canonical = CanonicalPath::from_path(temp_file.path()).unwrap();
-        assert_eq!(canonical.into_inner(), expected);
-    }
-
-    #[rstest]
-    fn canonical_path_not_equal_different_paths() {
-        let temp_file1 = NamedTempFile::new().unwrap();
-        let temp_file2 = NamedTempFile::new().unwrap();
-        let canonical1 = CanonicalPath::from_path(temp_file1.path()).unwrap();
-        let canonical2 = CanonicalPath::from_path(temp_file2.path()).unwrap();
-        assert_ne!(canonical1, canonical2);
-    }
-
-    #[rstest]
-    fn canonical_path_hash_different_paths() {
-        use std::collections::hash_map::DefaultHasher;
-        use std::hash::{Hash, Hasher};
-
-        let temp_file1 = NamedTempFile::new().unwrap();
-        let temp_file2 = NamedTempFile::new().unwrap();
-        let canonical1 = CanonicalPath::from_path(temp_file1.path()).unwrap();
-        let canonical2 = CanonicalPath::from_path(temp_file2.path()).unwrap();
-
-        let mut hasher1 = DefaultHasher::new();
-        canonical1.hash(&mut hasher1);
-        let hash1 = hasher1.finish();
-
-        let mut hasher2 = DefaultHasher::new();
-        canonical2.hash(&mut hasher2);
-        let hash2 = hasher2.finish();
-
-        assert_ne!(
-            hash1, hash2,
-            "different canonical paths should produce different hashes"
+        let path =
+            MarkedPath::<Relative>::new(std::path::PathBuf::from("some/relative/path")).unwrap();
+        assert_eq!(
+            path.to_path_buf(),
+            std::path::PathBuf::from("some/relative/path")
         );
     }
 
     #[rstest]
-    fn canonical_path_into_pathbuf() {
-        let temp_file = NamedTempFile::new().unwrap();
-        let canonical = CanonicalPath::from_path(temp_file.path()).unwrap();
-        let pathbuf: PathBuf = canonical.into();
-        assert_eq!(pathbuf, temp_file.path().to_path_buf());
+    fn marked_path_into_inner() {
+        let path =
+            MarkedPath::<Relative>::new(std::path::PathBuf::from("some/relative/path")).unwrap();
+        assert_eq!(
+            path.into_inner(),
+            std::path::PathBuf::from("some/relative/path")
+        );
     }
 }
