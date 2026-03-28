@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 
 use crate::absolute::Absolute;
-use crate::marked_path::{MarkedPath, PathError};
+use crate::marked_path::{MarkedPathBuf, PathError};
 
 /// A wrapper for canonicalized absolute paths.
 ///
@@ -14,7 +14,7 @@ use crate::marked_path::{MarkedPath, PathError};
 ///
 /// # Type Safety
 ///
-/// A `CanonicalPath` provides stronger guarantees than [`MarkedPath<Absolute>`]:
+/// A `CanonicalPath` provides stronger guarantees than [`MarkedPathBuf<Absolute>`]:
 /// - The path is absolute and fully resolved
 /// - The path existed at construction time
 /// - The path can be safely used for comparisons (no `.` or `..` ambiguity)
@@ -31,7 +31,7 @@ use crate::marked_path::{MarkedPath, PathError};
 /// # Ok::<(), marked_path::PathError>(())
 /// ```
 #[derive(Debug, PartialOrd, Ord)]
-pub struct CanonicalPath(MarkedPath<Absolute>);
+pub struct CanonicalPath(MarkedPathBuf<Absolute>);
 
 impl Clone for CanonicalPath {
     fn clone(&self) -> Self {
@@ -56,7 +56,7 @@ impl CanonicalPath {
         if canonicalized != path {
             return Err(PathError::NotCanonical);
         }
-        Ok(Self(MarkedPath {
+        Ok(Self(MarkedPathBuf {
             path,
             _marker: PhantomData,
         }))
@@ -91,8 +91,8 @@ impl CanonicalPath {
         self.0.into_inner()
     }
 
-    /// Consumes this `CanonicalPath` and returns the inner [`MarkedPath<Absolute>`].
-    pub fn into_marked(self) -> MarkedPath<Absolute> {
+    /// Consumes this `CanonicalPath` and returns the inner [`MarkedPathBuf<Absolute>`].
+    pub fn into_marked(self) -> MarkedPathBuf<Absolute> {
         self.0
     }
 }
