@@ -1,3 +1,4 @@
+use std::ffi::OsStr;
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -37,6 +38,46 @@ impl MarkedPathBuf<Relative> {
     /// Appends another relative path to this relative path.
     pub fn push(&mut self, other: &MarkedPath<Relative>) {
         self.path.push(other.path);
+    }
+
+    /// Updates [`self.file_name`](Path::file_name) to the given file name.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PathError::NotRelative`] if the resulting path is not relative.
+    /// This can happen if an absolute file name is provided.
+    ///
+    /// See [`PathBuf::set_file_name`](std::path::PathBuf::set_file_name).
+    pub fn set_file_name<S: AsRef<OsStr>>(&mut self, file_name: S) -> Result<(), PathError> {
+        self.path.set_file_name(file_name);
+        if self.path.is_relative() {
+            Ok(())
+        } else {
+            Err(PathError::NotRelative)
+        }
+    }
+
+    /// Returns a new owned [`MarkedPathBuf`] with the file name replaced.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PathError::NotRelative`] if the resulting path is not relative.
+    /// This can happen if an absolute file name is provided.
+    ///
+    /// See [`Path::with_file_name`](std::path::Path::with_file_name).
+    pub fn with_file_name<S: AsRef<OsStr>>(
+        &self,
+        file_name: S,
+    ) -> Result<MarkedPathBuf<Relative>, PathError> {
+        let new_path = self.path.with_file_name(file_name);
+        if new_path.is_relative() {
+            Ok(MarkedPathBuf {
+                path: new_path,
+                _marker: PhantomData,
+            })
+        } else {
+            Err(PathError::NotRelative)
+        }
     }
 }
 
@@ -104,6 +145,29 @@ impl<'a> MarkedPath<'a, Relative> {
     pub fn canonicalize(&self) -> Result<CanonicalPath, PathError> {
         let canonicalized = self.path.canonicalize()?;
         CanonicalPath::new(canonicalized)
+    }
+
+    /// Returns a new owned [`MarkedPathBuf`] with the file name replaced.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PathError::NotRelative`] if the resulting path is not relative.
+    /// This can happen if an absolute file name is provided.
+    ///
+    /// See [`Path::with_file_name`](std::path::Path::with_file_name).
+    pub fn with_file_name<S: AsRef<OsStr>>(
+        &self,
+        file_name: S,
+    ) -> Result<MarkedPathBuf<Relative>, PathError> {
+        let new_path = self.path.with_file_name(file_name);
+        if new_path.is_relative() {
+            Ok(MarkedPathBuf {
+                path: new_path,
+                _marker: PhantomData,
+            })
+        } else {
+            Err(PathError::NotRelative)
+        }
     }
 }
 
@@ -217,5 +281,58 @@ mod tests {
         std::env::set_current_dir(&prev_dir).unwrap();
         std::fs::remove_file(&file_path).ok();
         std::fs::remove_dir(&test_dir).ok();
+    }
+
+    #[rstest]
+    fn relative_set_file_name_with_relative() {
+        let mut relative = MarkedPathBuf::<Relative>::new(PathBuf::from("base/file.txt")).unwrap();
+        let result = relative.set_file_name("new_name.txt");
+        assert!(result.is_ok());
+        assert_eq!(relative.as_path(), Path::new("base/new_name.txt"));
+    }
+
+    #[rstest]
+    fn relative_set_file_name_with_absolute_rejects() {
+        let mut relative = MarkedPathBuf::<Relative>::new(PathBuf::from("base/file.txt")).unwrap();
+        let abs_name = if cfg!(windows) { r"C:\other" } else { "/other" };
+        let result = relative.set_file_name(abs_name);
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), PathError::NotRelative));
+    }
+
+    #[rstest]
+    fn relative_with_file_name_with_relative() {
+        let relative = MarkedPathBuf::<Relative>::new(PathBuf::from("base/file.txt")).unwrap();
+        let result = relative.with_file_name("new_name.txt");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().as_path(), Path::new("base/new_name.txt"));
+    }
+
+    #[rstest]
+    fn relative_with_file_name_with_absolute_rejects() {
+        let relative = MarkedPathBuf::<Relative>::new(PathBuf::from("base/file.txt")).unwrap();
+        let abs_name = if cfg!(windows) { r"C:\other" } else { "/other" };
+        let result = relative.with_file_name(abs_name);
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), PathError::NotRelative));
+    }
+
+    #[rstest]
+    fn relative_borrowed_with_file_name_with_relative() {
+        let relative = MarkedPathBuf::<Relative>::new(PathBuf::from("base/file.txt")).unwrap();
+        let borrowed = relative.as_marked_path();
+        let result = borrowed.with_file_name("new_name.txt");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().as_path(), Path::new("base/new_name.txt"));
+    }
+
+    #[rstest]
+    fn relative_borrowed_with_file_name_with_absolute_rejects() {
+        let relative = MarkedPathBuf::<Relative>::new(PathBuf::from("base/file.txt")).unwrap();
+        let borrowed = relative.as_marked_path();
+        let abs_name = if cfg!(windows) { r"C:\other" } else { "/other" };
+        let result = borrowed.with_file_name(abs_name);
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), PathError::NotRelative));
     }
 }

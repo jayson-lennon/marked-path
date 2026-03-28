@@ -104,13 +104,6 @@ impl<M> MarkedPathBuf<M> {
         self.path.pop()
     }
 
-    /// Updates [`self.file_name`](Path::file_name) to the given file name.
-    ///
-    /// See [`PathBuf::set_file_name`](std::path::PathBuf::set_file_name).
-    pub fn set_file_name<S: AsRef<OsStr>>(&mut self, file_name: S) {
-        self.path.set_file_name(file_name);
-    }
-
     /// Updates [`self.extension`](Path::extension) to the given extension.
     ///
     /// See [`PathBuf::set_extension`](std::path::PathBuf::set_extension).
@@ -292,16 +285,6 @@ impl<M> MarkedPathBuf<M> {
     pub fn with_added_extension<S: AsRef<OsStr>>(&self, extension: S) -> MarkedPathBuf<M> {
         MarkedPathBuf {
             path: self.path.with_added_extension(extension),
-            _marker: PhantomData,
-        }
-    }
-
-    /// Returns a new owned [`MarkedPathBuf`] with the file name replaced.
-    ///
-    /// See [`Path::with_file_name`](std::path::Path::with_file_name).
-    pub fn with_file_name<S: AsRef<OsStr>>(&self, file_name: S) -> MarkedPathBuf<M> {
-        MarkedPathBuf {
-            path: self.path.with_file_name(file_name),
             _marker: PhantomData,
         }
     }
@@ -526,16 +509,6 @@ impl<'a, M> MarkedPath<'a, M> {
     pub fn with_added_extension<S: AsRef<OsStr>>(&self, extension: S) -> MarkedPathBuf<M> {
         MarkedPathBuf {
             path: self.path.with_added_extension(extension),
-            _marker: PhantomData,
-        }
-    }
-
-    /// Returns a new owned [`MarkedPathBuf`] with the file name replaced.
-    ///
-    /// See [`Path::with_file_name`](std::path::Path::with_file_name).
-    pub fn with_file_name<S: AsRef<OsStr>>(&self, file_name: S) -> MarkedPathBuf<M> {
-        MarkedPathBuf {
-            path: self.path.with_file_name(file_name),
             _marker: PhantomData,
         }
     }

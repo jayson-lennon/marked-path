@@ -1,3 +1,4 @@
+use std::ffi::OsStr;
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -39,6 +40,29 @@ impl MarkedPathBuf<Absolute> {
     /// Appends a relative path to this absolute path.
     pub fn push(&mut self, other: &MarkedPath<Relative>) {
         self.path.push(other.path);
+    }
+
+    /// Updates [`self.file_name`](Path::file_name) to the given file name.
+    ///
+    /// This is infallible for absolute paths because even if an absolute file
+    /// name is provided, the result remains absolute.
+    ///
+    /// See [`PathBuf::set_file_name`](std::path::PathBuf::set_file_name).
+    pub fn set_file_name<S: AsRef<OsStr>>(&mut self, file_name: S) {
+        self.path.set_file_name(file_name);
+    }
+
+    /// Returns a new owned [`MarkedPathBuf`] with the file name replaced.
+    ///
+    /// This is infallible for absolute paths because even if an absolute file
+    /// name is provided, the result remains absolute.
+    ///
+    /// See [`Path::with_file_name`](std::path::Path::with_file_name).
+    pub fn with_file_name<S: AsRef<OsStr>>(&self, file_name: S) -> MarkedPathBuf<Absolute> {
+        MarkedPathBuf {
+            path: self.path.with_file_name(file_name),
+            _marker: PhantomData,
+        }
     }
 }
 
@@ -102,6 +126,19 @@ impl<'a> MarkedPath<'a, Absolute> {
     pub fn join_relative(&self, other: &MarkedPath<Relative>) -> MarkedPathBuf<Absolute> {
         MarkedPathBuf {
             path: self.path.join(other.path),
+            _marker: PhantomData,
+        }
+    }
+
+    /// Returns a new owned [`MarkedPathBuf`] with the file name replaced.
+    ///
+    /// This is infallible for absolute paths because even if an absolute file
+    /// name is provided, the result remains absolute.
+    ///
+    /// See [`Path::with_file_name`](std::path::Path::with_file_name).
+    pub fn with_file_name<S: AsRef<OsStr>>(&self, file_name: S) -> MarkedPathBuf<Absolute> {
+        MarkedPathBuf {
+            path: self.path.with_file_name(file_name),
             _marker: PhantomData,
         }
     }
@@ -234,5 +271,97 @@ mod tests {
         let path = Path::new("some/relative/path");
         let result = MarkedPath::<Absolute>::new(path);
         assert!(result.is_err());
+    }
+
+    #[rstest]
+    fn absolute_set_file_name_with_relative() {
+        let base_path = if cfg!(windows) {
+            PathBuf::from("C:\\base\\file.txt")
+        } else {
+            PathBuf::from("/base/file.txt")
+        };
+        let mut absolute = MarkedPathBuf::<Absolute>::new(base_path).unwrap();
+        absolute.set_file_name("new_name.txt");
+        let expected = if cfg!(windows) {
+            Path::new("C:\\base\\new_name.txt")
+        } else {
+            Path::new("/base/new_name.txt")
+        };
+        assert_eq!(absolute.as_path(), expected);
+    }
+
+    #[rstest]
+    fn absolute_set_file_name_with_absolute_stays_absolute() {
+        let base_path = if cfg!(windows) {
+            PathBuf::from("C:\\base\\file.txt")
+        } else {
+            PathBuf::from("/base/file.txt")
+        };
+        let mut absolute = MarkedPathBuf::<Absolute>::new(base_path).unwrap();
+        let abs_name = if cfg!(windows) { r"D:\other" } else { "/other" };
+        absolute.set_file_name(abs_name);
+        assert!(absolute.path.is_absolute());
+    }
+
+    #[rstest]
+    fn absolute_with_file_name_with_relative() {
+        let base_path = if cfg!(windows) {
+            PathBuf::from("C:\\base\\file.txt")
+        } else {
+            PathBuf::from("/base/file.txt")
+        };
+        let absolute = MarkedPathBuf::<Absolute>::new(base_path).unwrap();
+        let result = absolute.with_file_name("new_name.txt");
+        let expected = if cfg!(windows) {
+            Path::new("C:\\base\\new_name.txt")
+        } else {
+            Path::new("/base/new_name.txt")
+        };
+        assert_eq!(result.as_path(), expected);
+    }
+
+    #[rstest]
+    fn absolute_with_file_name_with_absolute_stays_absolute() {
+        let base_path = if cfg!(windows) {
+            PathBuf::from("C:\\base\\file.txt")
+        } else {
+            PathBuf::from("/base/file.txt")
+        };
+        let absolute = MarkedPathBuf::<Absolute>::new(base_path).unwrap();
+        let abs_name = if cfg!(windows) { r"D:\other" } else { "/other" };
+        let result = absolute.with_file_name(abs_name);
+        assert!(result.path.is_absolute());
+    }
+
+    #[rstest]
+    fn absolute_borrowed_with_file_name_with_relative() {
+        let base_path = if cfg!(windows) {
+            PathBuf::from("C:\\base\\file.txt")
+        } else {
+            PathBuf::from("/base/file.txt")
+        };
+        let absolute = MarkedPathBuf::<Absolute>::new(base_path).unwrap();
+        let borrowed = absolute.as_marked_path();
+        let result = borrowed.with_file_name("new_name.txt");
+        let expected = if cfg!(windows) {
+            Path::new("C:\\base\\new_name.txt")
+        } else {
+            Path::new("/base/new_name.txt")
+        };
+        assert_eq!(result.as_path(), expected);
+    }
+
+    #[rstest]
+    fn absolute_borrowed_with_file_name_with_absolute_stays_absolute() {
+        let base_path = if cfg!(windows) {
+            PathBuf::from("C:\\base\\file.txt")
+        } else {
+            PathBuf::from("/base/file.txt")
+        };
+        let absolute = MarkedPathBuf::<Absolute>::new(base_path).unwrap();
+        let borrowed = absolute.as_marked_path();
+        let abs_name = if cfg!(windows) { r"D:\other" } else { "/other" };
+        let result = borrowed.with_file_name(abs_name);
+        assert!(result.path.is_absolute());
     }
 }
