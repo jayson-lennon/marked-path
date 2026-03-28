@@ -51,6 +51,40 @@ impl MarkedPath<Absolute> {
     pub fn push(&mut self, other: &MarkedPath<Relative>) {
         self.path.push(&other.path);
     }
+
+    /// Joins this absolute path with the given path, returning a new
+    /// `MarkedPath<Absolute>`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PathError::NotAbsolute`] if the joined result is not absolute
+    /// (e.g., if an absolute path was passed that would replace the base).
+    pub fn join<P: AsRef<std::path::Path>>(
+        &self,
+        path: P,
+    ) -> Result<MarkedPath<Absolute>, PathError> {
+        let joined = self.path.join(path);
+        if joined.is_absolute() {
+            Ok(MarkedPath {
+                path: joined,
+                _marker: PhantomData,
+            })
+        } else {
+            Err(PathError::NotAbsolute)
+        }
+    }
+
+    /// Joins this absolute path with a typed relative path, returning a new
+    /// `MarkedPath<Absolute>`.
+    ///
+    /// This is infallible because joining a relative path onto an absolute
+    /// path always produces an absolute path.
+    pub fn join_relative(&self, other: &MarkedPath<Relative>) -> MarkedPath<Absolute> {
+        MarkedPath {
+            path: self.path.join(&other.path),
+            _marker: PhantomData,
+        }
+    }
 }
 
 impl FromStr for MarkedPath<Absolute> {
@@ -122,5 +156,70 @@ mod tests {
             "/base/subdir/file.txt"
         };
         assert_eq!(absolute.as_path(), Path::new(expected));
+    }
+
+    #[rstest]
+    fn join_absolute_with_relative_raw() {
+        // Given an absolute marked path.
+        let base_path = if cfg!(windows) {
+            PathBuf::from("C:\\base")
+        } else {
+            PathBuf::from("/base")
+        };
+        let absolute = MarkedPath::<Absolute>::new(base_path).unwrap();
+
+        // When joining with a relative path.
+        let result = absolute.join("subdir/file.txt");
+
+        // Then the result is ok and the path is combined.
+        assert!(result.is_ok());
+        let expected = if cfg!(windows) {
+            "C:\\base\\subdir\\file.txt"
+        } else {
+            "/base/subdir/file.txt"
+        };
+        assert_eq!(result.unwrap().as_path(), Path::new(expected));
+    }
+
+    #[rstest]
+    fn join_absolute_with_absolute_raw_replaces_base() {
+        // Given an absolute marked path.
+        let base_path = if cfg!(windows) {
+            PathBuf::from("C:\\base")
+        } else {
+            PathBuf::from("/base")
+        };
+        let absolute = MarkedPath::<Absolute>::new(base_path).unwrap();
+
+        // When joining with an absolute path (which replaces the base).
+        let other = if cfg!(windows) { "D:\\other" } else { "/other" };
+        let result = absolute.join(other);
+
+        // Then the result succeeds and is the replacement path.
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().as_path(), Path::new(other));
+    }
+
+    #[rstest]
+    fn join_relative_on_absolute() {
+        // Given an absolute marked path and a relative marked path.
+        let base_path = if cfg!(windows) {
+            PathBuf::from("C:\\base")
+        } else {
+            PathBuf::from("/base")
+        };
+        let absolute = MarkedPath::<Absolute>::new(base_path).unwrap();
+        let relative = MarkedPath::<Relative>::new(PathBuf::from("subdir/file.txt")).unwrap();
+
+        // When joining.
+        let result = absolute.join_relative(&relative);
+
+        // Then the path is combined.
+        let expected = if cfg!(windows) {
+            "C:\\base\\subdir\\file.txt"
+        } else {
+            "/base/subdir/file.txt"
+        };
+        assert_eq!(result.as_path(), Path::new(expected));
     }
 }
