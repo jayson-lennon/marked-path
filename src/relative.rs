@@ -113,6 +113,15 @@ mod tests {
     }
 
     #[rstest]
+    fn relative_new_accepts_empty_path() {
+        // Given an empty path, which std considers relative.
+        let result = MarkedPath::<Relative>::new("");
+
+        // Then the result is ok.
+        assert!(result.is_ok());
+    }
+
+    #[rstest]
     fn relative_new_rejects_absolute_path() {
         // Given an absolute path.
         let path = if cfg!(windows) {
