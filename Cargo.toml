@@ -3,8 +3,8 @@ name = "marked-path"
 version = "0.1.0"
 edition = "2024"
 description = "Type-safe path wrappers with compile-time absolute/relative guarantees"
-license = "AGPL-3.0-or-later"
-repository = "https://github.com/jaysones/marked-path"
+license = "LGPL-3.0-or-later"
+repository = "https://github.com/jayson-lennnon/marked-path"
 rust-version = "1.91"
 
 [dependencies]
