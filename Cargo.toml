@@ -5,7 +5,7 @@ edition = "2024"
 description = "Type-safe path wrappers with compile-time absolute/relative guarantees"
 license = "AGPL-3.0-or-later"
 repository = "https://github.com/jaysones/marked-path"
-rust-version = "1.85"
+rust-version = "1.91"
 
 [dependencies]
 wherror = "2.3.1"
