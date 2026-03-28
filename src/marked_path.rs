@@ -1,15 +1,15 @@
 // Copyright (C) 2026 Jayson Lennon
-// 
+//
 // This program is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
 // License as published by the Free Software Foundation; either
 // version 3 of the License, or (at your option) any later version.
-// 
+//
 // This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 // Lesser General Public License for more details.
-// 
+//
 // You should have received a copy of the GNU Lesser General Public License
 // along with this program; if not, see <https://opensource.org/license/lgpl-3-0>.
 
@@ -216,6 +216,10 @@ impl<M> MarkedPathBuf<M> {
     /// Returns `Ok(true)` if the path exists, `Ok(false)` if not, or an error.
     ///
     /// See [`Path::try_exists`](std::path::Path::try_exists).
+    ///
+    /// # Errors
+    ///
+    /// Returns I/O errors from the underlying filesystem call.
     pub fn try_exists(&self) -> Result<bool, std::io::Error> {
         self.path.try_exists()
     }
@@ -244,6 +248,10 @@ impl<M> MarkedPathBuf<M> {
     /// Reads the metadata for the path referenced by this path.
     ///
     /// See [`Path::metadata`](std::path::Path::metadata).
+    ///
+    /// # Errors
+    ///
+    /// Returns I/O errors from the underlying filesystem call.
     pub fn metadata(&self) -> Result<Metadata, std::io::Error> {
         self.path.metadata()
     }
@@ -251,6 +259,10 @@ impl<M> MarkedPathBuf<M> {
     /// Reads the symbolic link metadata for the path referenced by this path.
     ///
     /// See [`Path::symlink_metadata`](std::path::Path::symlink_metadata).
+    ///
+    /// # Errors
+    ///
+    /// Returns I/O errors from the underlying filesystem call.
     pub fn symlink_metadata(&self) -> Result<Metadata, std::io::Error> {
         self.path.symlink_metadata()
     }
@@ -258,6 +270,10 @@ impl<M> MarkedPathBuf<M> {
     /// Returns an iterator over the entries in this directory path.
     ///
     /// See [`Path::read_dir`](std::path::Path::read_dir).
+    ///
+    /// # Errors
+    ///
+    /// Returns I/O errors from the underlying filesystem call.
     pub fn read_dir(&self) -> Result<ReadDir, std::io::Error> {
         self.path.read_dir()
     }
@@ -287,6 +303,7 @@ impl<M> MarkedPathBuf<M> {
     /// Returns a new owned [`MarkedPathBuf`] with the extension replaced.
     ///
     /// See [`Path::with_extension`](std::path::Path::with_extension).
+    #[must_use = "returning a new MarkedPathBuf without using it is likely a mistake"]
     pub fn with_extension<S: AsRef<OsStr>>(&self, extension: S) -> MarkedPathBuf<M> {
         MarkedPathBuf {
             path: self.path.with_extension(extension),
@@ -297,6 +314,7 @@ impl<M> MarkedPathBuf<M> {
     /// Returns a new owned [`MarkedPathBuf`] with the extension appended.
     ///
     /// See [`Path::with_added_extension`](std::path::Path::with_added_extension).
+    #[must_use = "returning a new MarkedPathBuf without using it is likely a mistake"]
     pub fn with_added_extension<S: AsRef<OsStr>>(&self, extension: S) -> MarkedPathBuf<M> {
         MarkedPathBuf {
             path: self.path.with_added_extension(extension),
@@ -324,13 +342,13 @@ pub struct MarkedPath<'a, M> {
     pub(crate) _marker: PhantomData<M>,
 }
 
-impl<'a, M> fmt::Display for MarkedPath<'a, M> {
+impl<M> fmt::Display for MarkedPath<'_, M> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.path.display().fmt(f)
     }
 }
 
-impl<'a, M> AsRef<Path> for MarkedPath<'a, M> {
+impl<M> AsRef<Path> for MarkedPath<'_, M> {
     fn as_ref(&self) -> &Path {
         self.path
     }
@@ -440,6 +458,10 @@ impl<'a, M> MarkedPath<'a, M> {
     /// Returns `Ok(true)` if the path exists, `Ok(false)` if not, or an error.
     ///
     /// See [`Path::try_exists`](std::path::Path::try_exists).
+    ///
+    /// # Errors
+    ///
+    /// Returns I/O errors from the underlying filesystem call.
     pub fn try_exists(&self) -> Result<bool, std::io::Error> {
         self.path.try_exists()
     }
@@ -468,6 +490,10 @@ impl<'a, M> MarkedPath<'a, M> {
     /// Reads the metadata for the path referenced by this path.
     ///
     /// See [`Path::metadata`](std::path::Path::metadata).
+    ///
+    /// # Errors
+    ///
+    /// Returns I/O errors from the underlying filesystem call.
     pub fn metadata(&self) -> Result<Metadata, std::io::Error> {
         self.path.metadata()
     }
@@ -475,6 +501,10 @@ impl<'a, M> MarkedPath<'a, M> {
     /// Reads the symbolic link metadata for the path referenced by this path.
     ///
     /// See [`Path::symlink_metadata`](std::path::Path::symlink_metadata).
+    ///
+    /// # Errors
+    ///
+    /// Returns I/O errors from the underlying filesystem call.
     pub fn symlink_metadata(&self) -> Result<Metadata, std::io::Error> {
         self.path.symlink_metadata()
     }
@@ -482,6 +512,10 @@ impl<'a, M> MarkedPath<'a, M> {
     /// Returns an iterator over the entries in this directory path.
     ///
     /// See [`Path::read_dir`](std::path::Path::read_dir).
+    ///
+    /// # Errors
+    ///
+    /// Returns I/O errors from the underlying filesystem call.
     pub fn read_dir(&self) -> Result<ReadDir, std::io::Error> {
         self.path.read_dir()
     }
@@ -511,6 +545,7 @@ impl<'a, M> MarkedPath<'a, M> {
     /// Returns a new owned [`MarkedPathBuf`] with the extension replaced.
     ///
     /// See [`Path::with_extension`](std::path::Path::with_extension).
+    #[must_use = "returning a new MarkedPathBuf without using it is likely a mistake"]
     pub fn with_extension<S: AsRef<OsStr>>(&self, extension: S) -> MarkedPathBuf<M> {
         MarkedPathBuf {
             path: self.path.with_extension(extension),
@@ -521,6 +556,7 @@ impl<'a, M> MarkedPath<'a, M> {
     /// Returns a new owned [`MarkedPathBuf`] with the extension appended.
     ///
     /// See [`Path::with_added_extension`](std::path::Path::with_added_extension).
+    #[must_use = "returning a new MarkedPathBuf without using it is likely a mistake"]
     pub fn with_added_extension<S: AsRef<OsStr>>(&self, extension: S) -> MarkedPathBuf<M> {
         MarkedPathBuf {
             path: self.path.with_added_extension(extension),

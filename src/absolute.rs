@@ -1,15 +1,15 @@
 // Copyright (C) 2026 Jayson Lennon
-// 
+//
 // This program is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
 // License as published by the Free Software Foundation; either
 // version 3 of the License, or (at your option) any later version.
-// 
+//
 // This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 // Lesser General Public License for more details.
-// 
+//
 // You should have received a copy of the GNU Lesser General Public License
 // along with this program; if not, see <https://opensource.org/license/lgpl-3-0>.
 
@@ -73,6 +73,7 @@ impl MarkedPathBuf<Absolute> {
     /// name is provided, the result remains absolute.
     ///
     /// See [`Path::with_file_name`](std::path::Path::with_file_name).
+    #[must_use = "returning a new MarkedPathBuf without using it is likely a mistake"]
     pub fn with_file_name<S: AsRef<OsStr>>(&self, file_name: S) -> MarkedPathBuf<Absolute> {
         MarkedPathBuf {
             path: self.path.with_file_name(file_name),
