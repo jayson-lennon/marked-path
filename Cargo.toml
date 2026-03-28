@@ -5,7 +5,25 @@ edition = "2024"
 description = "Type-safe path wrappers with compile-time absolute/relative guarantees"
 license = "LGPL-3.0-or-later"
 repository = "https://github.com/jayson-lennnon/marked-path"
+keywords = ["path"]
+categories = ["rust-patterns"]
 rust-version = "1.91"
+readme = "README.md"
+exclude = ["/media", "AGENTS.md", "justfile", "release.toml"]
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+collapsible_if = "allow"
+default_constructed_unit_structs = "allow"
+doc_markdown = "allow"
+enum_glob_use = "allow"
+match_wildcard_for_single_variants = "allow"
+must_use_candidate = "allow"
+needless_pass_by_value = "allow"
+needless_raw_string_hashes = "allow"
+single_match = "allow"
+single_match_else = "allow"
+wildcard_imports = "allow"
 
 [dependencies]
 wherror = "2.3.1"
