@@ -17,6 +17,7 @@
 - Fix clippy pedantic lints (elidable_lifetime_names, uninlined_format_args)
 - Bump version
 - Add release toml for cargo release command
+- Add changelog
 ## [0.1.0] - 2026-03-28
 
 ### 🚀 Features
