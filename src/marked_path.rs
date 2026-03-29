@@ -359,4 +359,11 @@ mod tests {
         let owned = borrowed.to_owned();
         assert_eq!(owned.as_path(), std::path::Path::new("a/b"));
     }
+
+    #[rstest]
+    fn marked_path_into_pathbuf() {
+        let path = MarkedPathBuf::<Relative>::new("some/relative/path").unwrap();
+        let pathbuf: PathBuf = path.into();
+        assert_eq!(pathbuf, PathBuf::from("some/relative/path"));
+    }
 }
