@@ -169,6 +169,7 @@ impl From<CanonicalPath> for MarkedPathBuf<Absolute> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::path_access::MarkedPathAccess;
     use rstest::rstest;
 
     #[rstest]

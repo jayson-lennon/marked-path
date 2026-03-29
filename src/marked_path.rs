@@ -13,14 +13,14 @@
 // You should have received a copy of the GNU Lesser General Public License
 // along with this program; if not, see <https://opensource.org/license/lgpl-3-0>.
 
-use std::borrow::Cow;
 use std::ffi::{OsStr, OsString};
 use std::fmt;
-use std::fs::{Metadata, ReadDir};
 use std::marker::PhantomData;
-use std::path::{Ancestors, Components, Path, PathBuf};
+use std::path::{Ancestors, Path, PathBuf};
 
 use wherror::Error;
+
+use crate::path_access::{MarkedPathAccess, PathWrapper};
 
 /// Error type for path operations.
 ///
@@ -81,17 +81,46 @@ impl<M> From<MarkedPathBuf<M>> for PathBuf {
     }
 }
 
-impl<M> MarkedPathBuf<M> {
-    /// Returns a reference to the underlying [`Path`].
-    pub fn as_path(&self) -> &Path {
+impl<M> PathWrapper for MarkedPathBuf<M> {
+    type Owned = MarkedPathBuf<M>;
+    type Borrowed<'a>
+        = MarkedPath<'a, M>
+    where
+        M: 'a;
+    type Ancestors<'a>
+        = MarkedAncestors<'a, M>
+    where
+        M: 'a;
+
+    fn wrap_buf(path: PathBuf) -> MarkedPathBuf<M> {
+        MarkedPathBuf {
+            path,
+            _marker: PhantomData,
+        }
+    }
+
+    fn wrap_ref<'a>(path: &'a Path) -> MarkedPath<'a, M> {
+        MarkedPath {
+            path,
+            _marker: PhantomData,
+        }
+    }
+}
+
+impl<M> MarkedPathAccess for MarkedPathBuf<M> {
+    fn as_path(&self) -> &Path {
         &self.path
     }
 
-    /// Returns a clone of the underlying [`PathBuf`].
-    pub fn to_path_buf(&self) -> PathBuf {
-        self.path.clone()
+    fn ancestors(&self) -> MarkedAncestors<'_, M> {
+        MarkedAncestors {
+            inner: self.path.ancestors(),
+            _marker: PhantomData,
+        }
     }
+}
 
+impl<M> MarkedPathBuf<M> {
     /// Consumes this `MarkedPathBuf` and returns the underlying [`PathBuf`].
     pub fn into_inner(self) -> PathBuf {
         self.path
@@ -132,205 +161,6 @@ impl<M> MarkedPathBuf<M> {
     pub fn add_extension<S: AsRef<OsStr>>(&mut self, extension: S) -> bool {
         self.path.add_extension(extension)
     }
-
-    /// Returns the final component of this path.
-    ///
-    /// See [`Path::file_name`](std::path::Path::file_name).
-    pub fn file_name(&self) -> Option<&OsStr> {
-        self.path.file_name()
-    }
-
-    /// Returns the file stem (portion before the final `.`).
-    ///
-    /// See [`Path::file_stem`](std::path::Path::file_stem).
-    pub fn file_stem(&self) -> Option<&OsStr> {
-        self.path.file_stem()
-    }
-
-    /// Returns the extension (portion after the final `.`).
-    ///
-    /// See [`Path::extension`](std::path::Path::extension).
-    pub fn extension(&self) -> Option<&OsStr> {
-        self.path.extension()
-    }
-
-    /// Returns the file prefix (portion before the first `.` in the file name).
-    ///
-    /// See [`Path::file_prefix`](std::path::Path::file_prefix).
-    pub fn file_prefix(&self) -> Option<&OsStr> {
-        self.path.file_prefix()
-    }
-
-    /// Produces an iterator over this path and its ancestors.
-    ///
-    /// See [`Path::ancestors`](std::path::Path::ancestors).
-    pub fn ancestors(&self) -> MarkedAncestors<'_, M> {
-        MarkedAncestors {
-            inner: self.path.ancestors(),
-            _marker: PhantomData,
-        }
-    }
-
-    /// Produces an iterator over the components of this path.
-    ///
-    /// See [`Path::components`](std::path::Path::components).
-    pub fn components(&self) -> Components<'_> {
-        self.path.components()
-    }
-
-    /// Returns `true` if this path has a root component.
-    ///
-    /// See [`Path::has_root`](std::path::Path::has_root).
-    pub fn has_root(&self) -> bool {
-        self.path.has_root()
-    }
-
-    /// Returns `true` if this path is empty.
-    ///
-    /// See [`Path::is_empty`](std::path::Path::is_empty).
-    pub fn is_empty(&self) -> bool {
-        self.path.as_os_str().is_empty()
-    }
-
-    /// Returns `true` if this path starts with the given path.
-    ///
-    /// See [`Path::starts_with`](std::path::Path::starts_with).
-    pub fn starts_with<P: AsRef<Path>>(&self, base: P) -> bool {
-        self.path.starts_with(base)
-    }
-
-    /// Returns `true` if this path ends with the given path.
-    ///
-    /// See [`Path::ends_with`](std::path::Path::ends_with).
-    pub fn ends_with<P: AsRef<Path>>(&self, child: P) -> bool {
-        self.path.ends_with(child)
-    }
-
-    /// Returns `true` if this path exists on the filesystem.
-    ///
-    /// See [`Path::exists`](std::path::Path::exists).
-    pub fn exists(&self) -> bool {
-        self.path.exists()
-    }
-
-    /// Returns `Ok(true)` if the path exists, `Ok(false)` if not, or an error.
-    ///
-    /// See [`Path::try_exists`](std::path::Path::try_exists).
-    ///
-    /// # Errors
-    ///
-    /// Returns I/O errors from the underlying filesystem call.
-    pub fn try_exists(&self) -> Result<bool, std::io::Error> {
-        self.path.try_exists()
-    }
-
-    /// Returns `true` if this path exists and is a regular file.
-    ///
-    /// See [`Path::is_file`](std::path::Path::is_file).
-    pub fn is_file(&self) -> bool {
-        self.path.is_file()
-    }
-
-    /// Returns `true` if this path exists and is a directory.
-    ///
-    /// See [`Path::is_dir`](std::path::Path::is_dir).
-    pub fn is_dir(&self) -> bool {
-        self.path.is_dir()
-    }
-
-    /// Returns `true` if this path exists and is a symbolic link.
-    ///
-    /// See [`Path::is_symlink`](std::path::Path::is_symlink).
-    pub fn is_symlink(&self) -> bool {
-        self.path.is_symlink()
-    }
-
-    /// Reads the metadata for the path referenced by this path.
-    ///
-    /// See [`Path::metadata`](std::path::Path::metadata).
-    ///
-    /// # Errors
-    ///
-    /// Returns I/O errors from the underlying filesystem call.
-    pub fn metadata(&self) -> Result<Metadata, std::io::Error> {
-        self.path.metadata()
-    }
-
-    /// Reads the symbolic link metadata for the path referenced by this path.
-    ///
-    /// See [`Path::symlink_metadata`](std::path::Path::symlink_metadata).
-    ///
-    /// # Errors
-    ///
-    /// Returns I/O errors from the underlying filesystem call.
-    pub fn symlink_metadata(&self) -> Result<Metadata, std::io::Error> {
-        self.path.symlink_metadata()
-    }
-
-    /// Returns an iterator over the entries in this directory path.
-    ///
-    /// See [`Path::read_dir`](std::path::Path::read_dir).
-    ///
-    /// # Errors
-    ///
-    /// Returns I/O errors from the underlying filesystem call.
-    pub fn read_dir(&self) -> Result<ReadDir, std::io::Error> {
-        self.path.read_dir()
-    }
-
-    /// Returns this path as a `&str` if it is valid UTF-8.
-    ///
-    /// See [`Path::to_str`](std::path::Path::to_str).
-    pub fn to_str(&self) -> Option<&str> {
-        self.path.to_str()
-    }
-
-    /// Converts this path to a `Cow<str>`, replacing invalid UTF-8 with
-    /// replacement characters.
-    ///
-    /// See [`Path::to_string_lossy`](std::path::Path::to_string_lossy).
-    pub fn to_string_lossy(&self) -> Cow<'_, str> {
-        self.path.to_string_lossy()
-    }
-
-    /// Returns the underlying [`OsStr`] slice.
-    ///
-    /// See [`Path::as_os_str`](std::path::Path::as_os_str).
-    pub fn as_os_str(&self) -> &OsStr {
-        self.path.as_os_str()
-    }
-
-    /// Returns a new owned [`MarkedPathBuf`] with the extension replaced.
-    ///
-    /// See [`Path::with_extension`](std::path::Path::with_extension).
-    #[must_use = "returning a new MarkedPathBuf without using it is likely a mistake"]
-    pub fn with_extension<S: AsRef<OsStr>>(&self, extension: S) -> MarkedPathBuf<M> {
-        MarkedPathBuf {
-            path: self.path.with_extension(extension),
-            _marker: PhantomData,
-        }
-    }
-
-    /// Returns a new owned [`MarkedPathBuf`] with the extension appended.
-    ///
-    /// See [`Path::with_added_extension`](std::path::Path::with_added_extension).
-    #[must_use = "returning a new MarkedPathBuf without using it is likely a mistake"]
-    pub fn with_added_extension<S: AsRef<OsStr>>(&self, extension: S) -> MarkedPathBuf<M> {
-        MarkedPathBuf {
-            path: self.path.with_added_extension(extension),
-            _marker: PhantomData,
-        }
-    }
-
-    /// Returns the parent path, if any.
-    ///
-    /// See [`Path::parent`](std::path::Path::parent).
-    pub fn parent(&self) -> Option<MarkedPath<'_, M>> {
-        self.path.parent().map(|p| MarkedPath {
-            path: p,
-            _marker: PhantomData,
-        })
-    }
 }
 
 /// A borrowed, type-safe path reference with a zero-sized marker.
@@ -354,224 +184,52 @@ impl<M> AsRef<Path> for MarkedPath<'_, M> {
     }
 }
 
-impl<'a, M> MarkedPath<'a, M> {
-    /// Returns a reference to the underlying [`Path`].
-    pub fn as_path(&self) -> &'a Path {
+impl<'a, M> PathWrapper for MarkedPath<'a, M> {
+    type Owned = MarkedPathBuf<M>;
+    type Borrowed<'b>
+        = MarkedPath<'b, M>
+    where
+        Self: 'b;
+    type Ancestors<'b>
+        = MarkedAncestors<'b, M>
+    where
+        Self: 'b;
+
+    fn wrap_buf(path: PathBuf) -> MarkedPathBuf<M> {
+        MarkedPathBuf {
+            path,
+            _marker: PhantomData,
+        }
+    }
+
+    fn wrap_ref<'b>(path: &'b Path) -> MarkedPath<'b, M> {
+        MarkedPath {
+            path,
+            _marker: PhantomData,
+        }
+    }
+}
+
+impl<'a, M> MarkedPathAccess for MarkedPath<'a, M> {
+    fn as_path(&self) -> &'a Path {
         self.path
     }
 
-    /// Returns an owned [`PathBuf`] cloning the path data.
-    ///
-    /// See [`Path::to_path_buf`](std::path::Path::to_path_buf).
-    pub fn to_path_buf(&self) -> PathBuf {
-        self.path.to_path_buf()
+    fn ancestors(&self) -> MarkedAncestors<'a, M> {
+        MarkedAncestors {
+            inner: self.path.ancestors(),
+            _marker: PhantomData,
+        }
     }
+}
 
+impl<'a, M> MarkedPath<'a, M> {
     /// Returns an owned [`MarkedPathBuf`] cloning the path data.
     pub fn to_owned(&self) -> MarkedPathBuf<M> {
         MarkedPathBuf {
             path: self.path.to_path_buf(),
             _marker: PhantomData,
         }
-    }
-
-    /// Returns the final component of this path.
-    ///
-    /// See [`Path::file_name`](std::path::Path::file_name).
-    pub fn file_name(&self) -> Option<&OsStr> {
-        self.path.file_name()
-    }
-
-    /// Returns the file stem (portion before the final `.`).
-    ///
-    /// See [`Path::file_stem`](std::path::Path::file_stem).
-    pub fn file_stem(&self) -> Option<&OsStr> {
-        self.path.file_stem()
-    }
-
-    /// Returns the extension (portion after the final `.`).
-    ///
-    /// See [`Path::extension`](std::path::Path::extension).
-    pub fn extension(&self) -> Option<&OsStr> {
-        self.path.extension()
-    }
-
-    /// Returns the file prefix (portion before the first `.` in the file name).
-    ///
-    /// See [`Path::file_prefix`](std::path::Path::file_prefix).
-    pub fn file_prefix(&self) -> Option<&OsStr> {
-        self.path.file_prefix()
-    }
-
-    /// Produces an iterator over this path and its ancestors.
-    ///
-    /// See [`Path::ancestors`](std::path::Path::ancestors).
-    pub fn ancestors(&self) -> MarkedAncestors<'a, M> {
-        MarkedAncestors {
-            inner: self.path.ancestors(),
-            _marker: PhantomData,
-        }
-    }
-
-    /// Produces an iterator over the components of this path.
-    ///
-    /// See [`Path::components`](std::path::Path::components).
-    pub fn components(&self) -> Components<'a> {
-        self.path.components()
-    }
-
-    /// Returns `true` if this path has a root component.
-    ///
-    /// See [`Path::has_root`](std::path::Path::has_root).
-    pub fn has_root(&self) -> bool {
-        self.path.has_root()
-    }
-
-    /// Returns `true` if this path is empty.
-    ///
-    /// See [`Path::is_empty`](std::path::Path::is_empty).
-    pub fn is_empty(&self) -> bool {
-        self.path.as_os_str().is_empty()
-    }
-
-    /// Returns `true` if this path starts with the given path.
-    ///
-    /// See [`Path::starts_with`](std::path::Path::starts_with).
-    pub fn starts_with<P: AsRef<Path>>(&self, base: P) -> bool {
-        self.path.starts_with(base)
-    }
-
-    /// Returns `true` if this path ends with the given path.
-    ///
-    /// See [`Path::ends_with`](std::path::Path::ends_with).
-    pub fn ends_with<P: AsRef<Path>>(&self, child: P) -> bool {
-        self.path.ends_with(child)
-    }
-
-    /// Returns `true` if this path exists on the filesystem.
-    ///
-    /// See [`Path::exists`](std::path::Path::exists).
-    pub fn exists(&self) -> bool {
-        self.path.exists()
-    }
-
-    /// Returns `Ok(true)` if the path exists, `Ok(false)` if not, or an error.
-    ///
-    /// See [`Path::try_exists`](std::path::Path::try_exists).
-    ///
-    /// # Errors
-    ///
-    /// Returns I/O errors from the underlying filesystem call.
-    pub fn try_exists(&self) -> Result<bool, std::io::Error> {
-        self.path.try_exists()
-    }
-
-    /// Returns `true` if this path exists and is a regular file.
-    ///
-    /// See [`Path::is_file`](std::path::Path::is_file).
-    pub fn is_file(&self) -> bool {
-        self.path.is_file()
-    }
-
-    /// Returns `true` if this path exists and is a directory.
-    ///
-    /// See [`Path::is_dir`](std::path::Path::is_dir).
-    pub fn is_dir(&self) -> bool {
-        self.path.is_dir()
-    }
-
-    /// Returns `true` if this path exists and is a symbolic link.
-    ///
-    /// See [`Path::is_symlink`](std::path::Path::is_symlink).
-    pub fn is_symlink(&self) -> bool {
-        self.path.is_symlink()
-    }
-
-    /// Reads the metadata for the path referenced by this path.
-    ///
-    /// See [`Path::metadata`](std::path::Path::metadata).
-    ///
-    /// # Errors
-    ///
-    /// Returns I/O errors from the underlying filesystem call.
-    pub fn metadata(&self) -> Result<Metadata, std::io::Error> {
-        self.path.metadata()
-    }
-
-    /// Reads the symbolic link metadata for the path referenced by this path.
-    ///
-    /// See [`Path::symlink_metadata`](std::path::Path::symlink_metadata).
-    ///
-    /// # Errors
-    ///
-    /// Returns I/O errors from the underlying filesystem call.
-    pub fn symlink_metadata(&self) -> Result<Metadata, std::io::Error> {
-        self.path.symlink_metadata()
-    }
-
-    /// Returns an iterator over the entries in this directory path.
-    ///
-    /// See [`Path::read_dir`](std::path::Path::read_dir).
-    ///
-    /// # Errors
-    ///
-    /// Returns I/O errors from the underlying filesystem call.
-    pub fn read_dir(&self) -> Result<ReadDir, std::io::Error> {
-        self.path.read_dir()
-    }
-
-    /// Returns this path as a `&str` if it is valid UTF-8.
-    ///
-    /// See [`Path::to_str`](std::path::Path::to_str).
-    pub fn to_str(&self) -> Option<&str> {
-        self.path.to_str()
-    }
-
-    /// Converts this path to a `Cow<str>`, replacing invalid UTF-8 with
-    /// replacement characters.
-    ///
-    /// See [`Path::to_string_lossy`](std::path::Path::to_string_lossy).
-    pub fn to_string_lossy(&self) -> Cow<'_, str> {
-        self.path.to_string_lossy()
-    }
-
-    /// Returns the underlying [`OsStr`] slice.
-    ///
-    /// See [`Path::as_os_str`](std::path::Path::as_os_str).
-    pub fn as_os_str(&self) -> &OsStr {
-        self.path.as_os_str()
-    }
-
-    /// Returns a new owned [`MarkedPathBuf`] with the extension replaced.
-    ///
-    /// See [`Path::with_extension`](std::path::Path::with_extension).
-    #[must_use = "returning a new MarkedPathBuf without using it is likely a mistake"]
-    pub fn with_extension<S: AsRef<OsStr>>(&self, extension: S) -> MarkedPathBuf<M> {
-        MarkedPathBuf {
-            path: self.path.with_extension(extension),
-            _marker: PhantomData,
-        }
-    }
-
-    /// Returns a new owned [`MarkedPathBuf`] with the extension appended.
-    ///
-    /// See [`Path::with_added_extension`](std::path::Path::with_added_extension).
-    #[must_use = "returning a new MarkedPathBuf without using it is likely a mistake"]
-    pub fn with_added_extension<S: AsRef<OsStr>>(&self, extension: S) -> MarkedPathBuf<M> {
-        MarkedPathBuf {
-            path: self.path.with_added_extension(extension),
-            _marker: PhantomData,
-        }
-    }
-
-    /// Returns the parent path, if any.
-    ///
-    /// See [`Path::parent`](std::path::Path::parent).
-    pub fn parent(&self) -> Option<MarkedPath<'a, M>> {
-        self.path.parent().map(|p| MarkedPath {
-            path: p,
-            _marker: PhantomData,
-        })
     }
 }
 
@@ -591,6 +249,15 @@ impl<'a, M> Iterator for MarkedAncestors<'a, M> {
             path: p,
             _marker: PhantomData,
         })
+    }
+}
+
+impl<'a, M> From<std::path::Ancestors<'a>> for MarkedAncestors<'a, M> {
+    fn from(inner: std::path::Ancestors<'a>) -> Self {
+        MarkedAncestors {
+            inner,
+            _marker: PhantomData,
+        }
     }
 }
 

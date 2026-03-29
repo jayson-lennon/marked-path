@@ -1,15 +1,15 @@
 // Copyright (C) 2026 Jayson Lennon
-// 
+//
 // This program is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
 // License as published by the Free Software Foundation; either
 // version 3 of the License, or (at your option) any later version.
-// 
+//
 // This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 // Lesser General Public License for more details.
-// 
+//
 // You should have received a copy of the GNU Lesser General Public License
 // along with this program; if not, see <https://opensource.org/license/lgpl-3-0>.
 
@@ -18,7 +18,8 @@ use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 
 use crate::absolute::Absolute;
-use crate::marked_path::{MarkedPathBuf, PathError};
+use crate::marked_path::{MarkedPath, MarkedPathBuf, PathError};
+use crate::path_access::{MarkedPathAccess, PathWrapper};
 
 /// A wrapper for canonicalized absolute paths.
 ///
@@ -38,6 +39,7 @@ use crate::marked_path::{MarkedPathBuf, PathError};
 ///
 /// ```
 /// use std::path::Path;
+/// use marked_path::MarkedPathAccess;
 /// use marked_path::CanonicalPath;
 ///
 /// // Create from an existing path
@@ -91,16 +93,6 @@ impl CanonicalPath {
         CanonicalPath::new(canonicalized)
     }
 
-    /// Returns a reference to the underlying [`Path`].
-    pub fn as_path(&self) -> &Path {
-        self.0.as_path()
-    }
-
-    /// Returns a clone of the underlying [`PathBuf`].
-    pub fn to_path_buf(&self) -> PathBuf {
-        self.0.to_path_buf()
-    }
-
     /// Consumes this `CanonicalPath` and returns the underlying [`PathBuf`].
     pub fn into_inner(self) -> PathBuf {
         self.0.into_inner()
@@ -109,6 +101,32 @@ impl CanonicalPath {
     /// Consumes this `CanonicalPath` and returns the inner [`MarkedPathBuf<Absolute>`].
     pub fn into_marked(self) -> MarkedPathBuf<Absolute> {
         self.0
+    }
+}
+
+impl PathWrapper for CanonicalPath {
+    type Owned = MarkedPathBuf<Absolute>;
+    type Borrowed<'a> = MarkedPath<'a, Absolute>;
+    type Ancestors<'a> = std::path::Ancestors<'a>;
+
+    fn wrap_buf(path: PathBuf) -> MarkedPathBuf<Absolute> {
+        MarkedPathBuf {
+            path,
+            _marker: PhantomData,
+        }
+    }
+
+    fn wrap_ref<'a>(path: &'a Path) -> MarkedPath<'a, Absolute> {
+        MarkedPath {
+            path,
+            _marker: PhantomData,
+        }
+    }
+}
+
+impl MarkedPathAccess for CanonicalPath {
+    fn as_path(&self) -> &Path {
+        self.0.as_path()
     }
 }
 
