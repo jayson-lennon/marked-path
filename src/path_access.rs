@@ -31,7 +31,7 @@ mod sealed {
             Self: 'a;
 
         fn wrap_buf(path: PathBuf) -> Self::Owned;
-        fn wrap_ref<'a>(path: &'a Path) -> Self::Borrowed<'a>;
+        fn wrap_ref(path: &Path) -> Self::Borrowed<'_>;
     }
 }
 

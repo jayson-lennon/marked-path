@@ -116,7 +116,7 @@ impl PathWrapper for CanonicalPath {
         }
     }
 
-    fn wrap_ref<'a>(path: &'a Path) -> MarkedPath<'a, Absolute> {
+    fn wrap_ref(path: &Path) -> MarkedPath<'_, Absolute> {
         MarkedPath {
             path,
             _marker: PhantomData,

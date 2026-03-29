@@ -99,7 +99,7 @@ impl<M> PathWrapper for MarkedPathBuf<M> {
         }
     }
 
-    fn wrap_ref<'a>(path: &'a Path) -> MarkedPath<'a, M> {
+    fn wrap_ref(path: &Path) -> MarkedPath<'_, M> {
         MarkedPath {
             path,
             _marker: PhantomData,
@@ -184,7 +184,7 @@ impl<M> AsRef<Path> for MarkedPath<'_, M> {
     }
 }
 
-impl<'a, M> PathWrapper for MarkedPath<'a, M> {
+impl<M> PathWrapper for MarkedPath<'_, M> {
     type Owned = MarkedPathBuf<M>;
     type Borrowed<'b>
         = MarkedPath<'b, M>
@@ -202,7 +202,7 @@ impl<'a, M> PathWrapper for MarkedPath<'a, M> {
         }
     }
 
-    fn wrap_ref<'b>(path: &'b Path) -> MarkedPath<'b, M> {
+    fn wrap_ref(path: &Path) -> MarkedPath<'_, M> {
         MarkedPath {
             path,
             _marker: PhantomData,
@@ -223,7 +223,7 @@ impl<'a, M> MarkedPathAccess for MarkedPath<'a, M> {
     }
 }
 
-impl<'a, M> MarkedPath<'a, M> {
+impl<M> MarkedPath<'_, M> {
     /// Returns an owned [`MarkedPathBuf`] cloning the path data.
     pub fn to_owned(&self) -> MarkedPathBuf<M> {
         MarkedPathBuf {
@@ -272,7 +272,7 @@ mod tests {
     fn marked_path_display() {
         let path =
             MarkedPathBuf::<Relative>::new(std::path::PathBuf::from("some/relative/path")).unwrap();
-        assert_eq!(format!("{}", path), "some/relative/path");
+        assert_eq!(format!("{path}"), "some/relative/path");
     }
 
     #[rstest]
