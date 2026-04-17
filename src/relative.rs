@@ -55,6 +55,18 @@ impl MarkedPathBuf<Relative> {
         self.path.push(other.path);
     }
 
+    /// Joins this relative path with another typed relative path, returning a
+    /// new `MarkedPathBuf<Relative>`.
+    ///
+    /// This is infallible because joining a relative path onto a relative
+    /// path always produces a relative path.
+    pub fn join_relative(&self, other: &MarkedPath<Relative>) -> MarkedPathBuf<Relative> {
+        MarkedPathBuf {
+            path: self.path.join(other.path),
+            _marker: PhantomData,
+        }
+    }
+
     /// Updates [`self.file_name`](Path::file_name) to the given file name.
     ///
     /// # Errors
@@ -297,6 +309,17 @@ mod tests {
         std::env::set_current_dir(&prev_dir).unwrap();
         std::fs::remove_file(&file_path).ok();
         std::fs::remove_dir(&test_dir).ok();
+    }
+
+    #[rstest]
+    fn relative_buf_join_relative() {
+        let base = MarkedPathBuf::<Relative>::new(PathBuf::from("base")).unwrap();
+        let other = MarkedPathBuf::<Relative>::new(PathBuf::from("subdir/file.txt")).unwrap();
+        let result = base.join_relative(&other.as_marked_path());
+        assert_eq!(
+            result.as_path(),
+            std::path::Path::new("base/subdir/file.txt")
+        );
     }
 
     #[rstest]

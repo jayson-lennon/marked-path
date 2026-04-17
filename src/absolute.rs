@@ -57,6 +57,18 @@ impl MarkedPathBuf<Absolute> {
         self.path.push(other.path);
     }
 
+    /// Joins this absolute path with a typed relative path, returning a new
+    /// `MarkedPathBuf<Absolute>`.
+    ///
+    /// This is infallible because joining a relative path onto an absolute
+    /// path always produces an absolute path.
+    pub fn join_relative(&self, other: &MarkedPath<Relative>) -> MarkedPathBuf<Absolute> {
+        MarkedPathBuf {
+            path: self.path.join(other.path),
+            _marker: PhantomData,
+        }
+    }
+
     /// Updates [`self.file_name`](Path::file_name) to the given file name.
     ///
     /// This is infallible for absolute paths because even if an absolute file
@@ -288,6 +300,26 @@ mod tests {
         let path = Path::new("some/relative/path");
         let result = MarkedPath::<Absolute>::new(path);
         assert!(result.is_err());
+    }
+
+    #[rstest]
+    fn absolute_buf_join_relative() {
+        let base_path = if cfg!(windows) {
+            PathBuf::from("C:\\base")
+        } else {
+            PathBuf::from("/base")
+        };
+        let absolute = MarkedPathBuf::<Absolute>::new(base_path).unwrap();
+        let relative = MarkedPathBuf::<Relative>::new(PathBuf::from("subdir/file.txt")).unwrap();
+
+        let result = absolute.join_relative(&relative.as_marked_path());
+
+        let expected = if cfg!(windows) {
+            "C:\\base\\subdir\\file.txt"
+        } else {
+            "/base/subdir/file.txt"
+        };
+        assert_eq!(result.as_path(), Path::new(expected));
     }
 
     #[rstest]
