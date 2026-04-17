@@ -1,3 +1,8 @@
+## [0.2.1] - 2026-04-17
+
+### 🚀 Features
+
+- Add join_relative to MarkedPathBuf<Absolute> and MarkedPathBuf<Relative>
 ## [0.2.0] - 2026-03-29
 
 ### 🚜 Refactor
@@ -18,6 +23,7 @@
 - Bump version
 - Add release toml for cargo release command
 - Add changelog
+- Release marked-path version 0.2.0
 ## [0.1.0] - 2026-03-28
 
 ### 🚀 Features
