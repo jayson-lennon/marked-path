@@ -1,6 +1,6 @@
 [package]
 name = "marked-path"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2024"
 description = "Type-safe path wrappers with compile-time absolute/relative guarantees"
 license = "LGPL-3.0-or-later"
