@@ -62,6 +62,7 @@ impl MarkedPathBuf<Absolute> {
     ///
     /// This is infallible because joining a relative path onto an absolute
     /// path always produces an absolute path.
+    #[must_use]
     pub fn join_relative(&self, other: &MarkedPath<Relative>) -> MarkedPathBuf<Absolute> {
         MarkedPathBuf {
             path: self.path.join(other.path),
