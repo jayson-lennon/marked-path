@@ -20,6 +20,7 @@ use std::str::FromStr;
 
 use crate::canonical::CanonicalPath;
 use crate::marked_path::{MarkedPath, MarkedPathBuf, PathError};
+use crate::normalize::{has_drive_prefix, normalize_separators};
 
 /// Marker type for relative paths.
 ///
@@ -32,22 +33,29 @@ pub struct Relative;
 impl MarkedPathBuf<Relative> {
     /// Creates a new `MarkedPathBuf<Relative>` from the given path.
     ///
+    /// The path's separators are normalized to the platform's own separator,
+    /// so a relative path written with forward slashes does not leave a
+    /// mixed-separator path behind on Windows.
+    ///
     /// # Errors
     ///
-    /// Returns a [`PathError`] if the path is not relative.
+    /// Returns a [`PathError`] if the path is not relative, or if it carries
+    /// a Windows drive prefix (`C:`, `C:foo`). A drive-prefixed path is
+    /// *drive-relative*: it resolves against the working directory of that
+    /// drive rather than the process working directory, so it does not name
+    /// the file the caller meant.
     pub fn new<P>(path: P) -> Result<Self, PathError>
     where
         P: Into<PathBuf>,
     {
         let path = path.into();
-        if path.is_relative() {
-            Ok(Self {
-                path,
-                _marker: PhantomData,
-            })
-        } else {
-            Err(PathError::NotRelative)
+        if !is_relative_path(&path) {
+            return Err(PathError::NotRelative);
         }
+        Ok(Self {
+            path: normalize_separators(&path),
+            _marker: PhantomData,
+        })
     }
 
     /// Appends another relative path to this relative path.
@@ -72,13 +80,17 @@ impl MarkedPathBuf<Relative> {
     ///
     /// # Errors
     ///
-    /// Returns [`PathError::NotRelative`] if the resulting path is not relative.
-    /// This can happen if an absolute file name is provided.
+    /// Returns [`PathError::NotRelative`] if the resulting path is not relative,
+    /// or if the file name carries a Windows drive prefix (`C:`, `C:foo`).
     ///
     /// See [`PathBuf::set_file_name`](std::path::PathBuf::set_file_name).
     pub fn set_file_name<S: AsRef<OsStr>>(&mut self, file_name: S) -> Result<(), PathError> {
+        if has_drive_prefix(Path::new(file_name.as_ref())) {
+            return Err(PathError::NotRelative);
+        }
         self.path.set_file_name(file_name);
-        if self.path.is_relative() {
+        if is_relative_path(&self.path) {
+            self.path = normalize_separators(&self.path);
             Ok(())
         } else {
             Err(PathError::NotRelative)
@@ -89,24 +101,38 @@ impl MarkedPathBuf<Relative> {
     ///
     /// # Errors
     ///
-    /// Returns [`PathError::NotRelative`] if the resulting path is not relative.
-    /// This can happen if an absolute file name is provided.
+    /// Returns [`PathError::NotRelative`] if the resulting path is not relative,
+    /// or if the file name carries a Windows drive prefix (`C:`, `C:foo`).
     ///
     /// See [`Path::with_file_name`](std::path::Path::with_file_name).
     pub fn with_file_name<S: AsRef<OsStr>>(
         &self,
         file_name: S,
     ) -> Result<MarkedPathBuf<Relative>, PathError> {
+        if has_drive_prefix(Path::new(file_name.as_ref())) {
+            return Err(PathError::NotRelative);
+        }
         let new_path = self.path.with_file_name(file_name);
-        if new_path.is_relative() {
+        if is_relative_path(&new_path) {
             Ok(MarkedPathBuf {
-                path: new_path,
+                path: normalize_separators(&new_path),
                 _marker: PhantomData,
             })
         } else {
             Err(PathError::NotRelative)
         }
     }
+}
+
+/// Whether `path` names a location relative to some base directory.
+///
+/// A path qualifies when it has no root and no Windows drive prefix. The
+/// drive-prefix check is what separates this from [`Path::is_relative`]:
+/// `C:foo` has a prefix but no root, so `is_relative` accepts it, yet on
+/// Windows it resolves against the *current drive's* working directory rather
+/// than the process working directory.
+fn is_relative_path(path: &Path) -> bool {
+    path.is_relative() && !has_drive_prefix(path)
 }
 
 impl FromStr for MarkedPathBuf<Relative> {
@@ -121,9 +147,10 @@ impl<'a> MarkedPath<'a, Relative> {
     ///
     /// # Errors
     ///
-    /// Returns a [`PathError`] if the path is not relative.
+    /// Returns a [`PathError`] if the path is not relative, or if it carries
+    /// a Windows drive prefix (`C:`, `C:foo`).
     pub fn new(path: &'a Path) -> Result<Self, PathError> {
-        if path.is_relative() {
+        if is_relative_path(path) {
             Ok(Self {
                 path,
                 _marker: PhantomData,
@@ -138,12 +165,20 @@ impl<'a> MarkedPath<'a, Relative> {
     ///
     /// # Errors
     ///
-    /// Returns [`PathError::NotRelative`] if the joined result is not relative.
+    /// Returns [`PathError::NotRelative`] if the joined result is not relative,
+    /// or if the given path carries a Windows drive prefix (`C:`, `C:foo`).
     pub fn join<P: AsRef<Path>>(&self, path: P) -> Result<MarkedPathBuf<Relative>, PathError> {
+        let path = path.as_ref();
+        // A drive-prefixed argument is rejected before the join: `join`
+        // would otherwise turn `C:foo` into `base/C:foo`, which reads as
+        // relative but names a different file on Windows.
+        if has_drive_prefix(path) {
+            return Err(PathError::NotRelative);
+        }
         let joined = self.path.join(path);
-        if joined.is_relative() {
+        if is_relative_path(&joined) {
             Ok(MarkedPathBuf {
-                path: joined,
+                path: normalize_separators(&joined),
                 _marker: PhantomData,
             })
         } else {
@@ -179,18 +214,21 @@ impl<'a> MarkedPath<'a, Relative> {
     ///
     /// # Errors
     ///
-    /// Returns [`PathError::NotRelative`] if the resulting path is not relative.
-    /// This can happen if an absolute file name is provided.
+    /// Returns [`PathError::NotRelative`] if the resulting path is not relative,
+    /// or if the file name carries a Windows drive prefix (`C:`, `C:foo`).
     ///
     /// See [`Path::with_file_name`](std::path::Path::with_file_name).
     pub fn with_file_name<S: AsRef<OsStr>>(
         &self,
         file_name: S,
     ) -> Result<MarkedPathBuf<Relative>, PathError> {
+        if has_drive_prefix(Path::new(file_name.as_ref())) {
+            return Err(PathError::NotRelative);
+        }
         let new_path = self.path.with_file_name(file_name);
-        if new_path.is_relative() {
+        if is_relative_path(&new_path) {
             Ok(MarkedPathBuf {
-                path: new_path,
+                path: normalize_separators(&new_path),
                 _marker: PhantomData,
             })
         } else {
@@ -227,6 +265,61 @@ mod tests {
         };
         let result = MarkedPathBuf::<Relative>::new(path);
         assert!(result.is_err());
+    }
+
+    #[rstest]
+    fn relative_new_rejects_drive_relative_path() {
+        // A drive-relative path has a prefix but no root, so `Path::is_relative`
+        // accepts it — yet on Windows it resolves against the current drive's
+        // working directory, not the process working directory.
+        let result = MarkedPathBuf::<Relative>::new("C:foo");
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), PathError::NotRelative));
+    }
+
+    #[rstest]
+    fn relative_new_rejects_bare_drive() {
+        let result = MarkedPathBuf::<Relative>::new("C:");
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), PathError::NotRelative));
+    }
+
+    #[rstest]
+    fn borrowed_relative_new_rejects_drive_relative_path() {
+        let result = MarkedPath::<Relative>::new(Path::new("C:foo"));
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), PathError::NotRelative));
+    }
+
+    #[rstest]
+    fn relative_new_normalizes_separators_to_the_platform_separator() {
+        let result = MarkedPathBuf::<Relative>::new("a/b/c.txt");
+        let expected = ["a", "b", "c.txt"].join(std::path::MAIN_SEPARATOR_STR);
+        assert_eq!(result.unwrap().as_path(), Path::new(&expected));
+    }
+
+    #[rstest]
+    fn relative_join_rejects_drive_relative_path() {
+        let base = MarkedPathBuf::<Relative>::new("base").unwrap();
+        let result = base.as_marked_path().join("C:foo");
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), PathError::NotRelative));
+    }
+
+    #[rstest]
+    fn relative_set_file_name_rejects_drive_relative_path() {
+        let mut relative = MarkedPathBuf::<Relative>::new("base/file.txt").unwrap();
+        let result = relative.set_file_name("C:foo");
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), PathError::NotRelative));
+    }
+
+    #[rstest]
+    fn relative_with_file_name_rejects_drive_relative_path() {
+        let relative = MarkedPathBuf::<Relative>::new("base/file.txt").unwrap();
+        let result = relative.with_file_name("C:foo");
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), PathError::NotRelative));
     }
 
     #[rstest]

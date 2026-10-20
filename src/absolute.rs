@@ -20,6 +20,7 @@ use std::str::FromStr;
 
 use crate::canonical::CanonicalPath;
 use crate::marked_path::{MarkedPath, MarkedPathBuf, PathError};
+use crate::normalize::normalize_separators;
 use crate::relative::Relative;
 
 /// Marker type for absolute paths.
@@ -34,6 +35,10 @@ pub struct Absolute;
 impl MarkedPathBuf<Absolute> {
     /// Creates a new `MarkedPathBuf<Absolute>` from the given path.
     ///
+    /// The path's separators are normalized to the platform's own separator,
+    /// so a path written with forward slashes does not leave a mixed-separator
+    /// path behind on Windows.
+    ///
     /// # Errors
     ///
     /// Returns a [`PathError`] if the path is not absolute.
@@ -44,7 +49,7 @@ impl MarkedPathBuf<Absolute> {
         let path = path.into();
         if path.is_absolute() {
             Ok(Self {
-                path,
+                path: normalize_separators(&path),
                 _marker: PhantomData,
             })
         } else {
@@ -65,7 +70,7 @@ impl MarkedPathBuf<Absolute> {
     #[must_use]
     pub fn join_relative(&self, other: &MarkedPath<Relative>) -> MarkedPathBuf<Absolute> {
         MarkedPathBuf {
-            path: self.path.join(other.path),
+            path: normalize_separators(&self.path.join(other.path)),
             _marker: PhantomData,
         }
     }
@@ -139,7 +144,7 @@ impl<'a> MarkedPath<'a, Absolute> {
         let joined = self.path.join(path);
         if joined.is_absolute() {
             Ok(MarkedPathBuf {
-                path: joined,
+                path: normalize_separators(&joined),
                 _marker: PhantomData,
             })
         } else {
@@ -154,7 +159,7 @@ impl<'a> MarkedPath<'a, Absolute> {
     /// path always produces an absolute path.
     pub fn join_relative(&self, other: &MarkedPath<Relative>) -> MarkedPathBuf<Absolute> {
         MarkedPathBuf {
-            path: self.path.join(other.path),
+            path: normalize_separators(&self.path.join(other.path)),
             _marker: PhantomData,
         }
     }

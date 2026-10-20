@@ -38,6 +38,7 @@
 mod absolute;
 mod canonical;
 mod marked_path;
+mod normalize;
 mod path_access;
 mod relative;
 

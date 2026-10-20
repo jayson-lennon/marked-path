@@ -1,3 +1,29 @@
+## [0.3.0] - 2026-10-20
+
+### 🐛 Bug Fixes
+
+- Normalize path separators to the platform's own separator on construction, so a
+  relative path written with forward slashes no longer leaves a mixed-separator path
+  behind on Windows
+- Reject Windows drive-prefixed paths (`C:`, `C:foo`) in `Relative` on every platform.
+  A drive-relative path resolves against the current drive's working directory
+  rather than the process working directory, and `Path::is_relative` does not
+  catch it because such a path has a prefix but no root
+- Strip the Windows `\\?\` verbatim prefix before the canonical-form check, so
+  `CanonicalPath` accepts a path that came out of `std::fs::canonicalize` and
+  compares equal to a user-built plain path
+
+### 🚀 Features
+
+- Implement `Deref<Target = Path>` for `MarkedPathBuf` and `MarkedPath`, so the
+  marked types can be used wherever a path is expected without an explicit
+  conversion
+
+### ⚙️ Miscellaneous Tasks
+
+- Fix the repository URL typo and exclude the mutation-testing output directories
+  from the published package
+
 ## [0.2.1] - 2026-04-17
 
 ### 🚀 Features

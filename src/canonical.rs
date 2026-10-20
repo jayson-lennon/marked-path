@@ -19,6 +19,7 @@ use std::path::{Path, PathBuf};
 
 use crate::absolute::Absolute;
 use crate::marked_path::{MarkedPath, MarkedPathBuf, PathError};
+use crate::normalize::strip_verbatim_prefix;
 use crate::path_access::{MarkedPathAccess, PathWrapper};
 
 /// A wrapper for canonicalized absolute paths.
@@ -59,6 +60,11 @@ impl Clone for CanonicalPath {
 impl CanonicalPath {
     /// Creates a new `CanonicalPath` from a path, validating it is canonical.
     ///
+    /// On Windows, the verbatim prefix that canonicalization produces is
+    /// stripped before the canonical-form check, so a path that came out of
+    /// [`std::fs::canonicalize`] is accepted and the result compares equal to
+    /// a user-built plain path.
+    ///
     /// # Errors
     ///
     /// Returns a [`PathError`] if:
@@ -70,11 +76,12 @@ impl CanonicalPath {
     {
         let path = path.into();
         let canonicalized = path.canonicalize()?;
-        if canonicalized != path {
+        let plain = strip_verbatim_prefix(canonicalized);
+        if plain != path {
             return Err(PathError::NotCanonical);
         }
         Ok(Self(MarkedPathBuf {
-            path,
+            path: plain,
             _marker: PhantomData,
         }))
     }
@@ -175,6 +182,53 @@ mod tests {
         assert!(canonical.is_ok());
         let canonical = canonical.unwrap();
         assert!(canonical.as_path().is_absolute());
+    }
+
+    #[rstest]
+    fn canonical_path_accepts_a_canonicalized_path() {
+        // Given a path that has already been canonicalized.
+        let temp_file = NamedTempFile::new().unwrap();
+        let canonicalized = temp_file.path().canonicalize().unwrap();
+
+        // When constructing a canonical path from that result.
+        let canonical = CanonicalPath::new(canonicalized.clone());
+
+        // Then it is accepted, because the path is already in canonical form.
+        assert!(canonical.is_ok());
+        assert_eq!(canonical.unwrap().as_path(), canonicalized);
+    }
+
+    #[rstest]
+    fn canonical_path_rejects_a_non_canonical_path() {
+        // Given a directory path carrying a `..` component.
+        let temp_dir = tempfile::tempdir().unwrap();
+        let mut non_canonical = temp_dir.path().to_path_buf();
+        non_canonical.push("..");
+
+        // When constructing a canonical path from it.
+        let canonical = CanonicalPath::new(non_canonical);
+
+        // Then it is rejected as not canonical.
+        assert!(canonical.is_err());
+        assert!(matches!(canonical.unwrap_err(), PathError::NotCanonical));
+    }
+
+    #[cfg(windows)]
+    #[rstest]
+    fn canonical_path_carries_no_verbatim_prefix() {
+        // Given a real temp directory.
+        let temp_dir = tempfile::tempdir().unwrap();
+
+        // When canonicalizing it.
+        let canonical = CanonicalPath::from_path(temp_dir.path()).unwrap();
+
+        // Then the result carries no verbatim prefix.
+        assert!(
+            !canonical
+                .as_path()
+                .to_str()
+                .is_some_and(|text| text.starts_with(r"\\?"))
+        );
     }
 
     #[rstest]

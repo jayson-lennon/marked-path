@@ -1,15 +1,15 @@
 [package]
 name = "marked-path"
-version = "0.2.1"
+version = "0.3.0"
 edition = "2024"
 description = "Type-safe path wrappers with compile-time absolute/relative guarantees"
 license = "LGPL-3.0-or-later"
-repository = "https://github.com/jayson-lennnon/marked-path"
+repository = "https://github.com/jayson-lennon/marked-path"
 keywords = ["path"]
 categories = ["rust-patterns"]
 rust-version = "1.91"
 readme = "README.md"
-exclude = ["/media", "AGENTS.md", "justfile", "release.toml"]
+exclude = ["/media", "AGENTS.md", "justfile", "release.toml", "mutants.out", "mutants.out.old"]
 
 [lints.clippy]
 pedantic = { level = "warn", priority = -1 }
