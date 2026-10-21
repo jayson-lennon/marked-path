@@ -19,6 +19,7 @@ use std::marker::PhantomData;
 use std::ops::Deref;
 use std::path::{Ancestors, Path, PathBuf};
 
+use serde::{Deserialize, Serialize};
 use wherror::Error;
 
 use crate::path_access::{MarkedPathAccess, PathWrapper};
@@ -49,7 +50,7 @@ pub enum PathError {
 /// An owned, type-safe path wrapper with a zero-sized marker.
 ///
 /// See [`MarkedPath`] for the borrowed equivalent.
-#[derive(Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct MarkedPathBuf<M> {
     pub(crate) path: PathBuf,
     pub(crate) _marker: PhantomData<M>,

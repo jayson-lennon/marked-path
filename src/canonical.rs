@@ -15,6 +15,7 @@
 
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
+use std::ops::Deref;
 use std::path::{Path, PathBuf};
 
 use crate::absolute::Absolute;
