@@ -89,6 +89,64 @@ let pathbuf: std::path::PathBuf = abs.into();
 # Ok::<(), marked_path::PathError>(())
 ```
 
+### Serialization
+
+`MarkedPathBuf` serializes as a two-field object: the path and the marker
+that constructed it. On deserialization the marker is a label, not an
+authority — the content is validated against the target type, so a relative
+path never reconstructs as `MarkedPathBuf<Absolute>`, whatever the label
+claims. The bare-string shape is accepted too, so path strings stored before
+this marker existed load unchanged.
+
+```rust
+use marked_path::{Absolute, MarkedPathBuf, MarkedPathAccess};
+
+let abs = MarkedPathBuf::<Absolute>::new("/home/user")?;
+assert_eq!(
+    serde_json::to_string(&abs)?,
+    r#"{"path":"/home/user","marker":"absolute"}"#
+);
+
+// Round-trips through the tagged form.
+let loaded: MarkedPathBuf<Absolute> = serde_json::from_str(&serde_json::to_string(&abs)?)?;
+assert_eq!(loaded.as_path(), std::path::Path::new("/home/user"));
+
+// Legacy bare strings still load, with the same content validation.
+let legacy: MarkedPathBuf<Absolute> = serde_json::from_str(r#""/home/user""#)?;
+assert_eq!(legacy.as_path(), std::path::Path::new("/home/user"));
+
+// A relative string is rejected here, in both shapes.
+assert!(serde_json::from_str::<MarkedPathBuf<Absolute>>(r#""documents""#).is_err());
+assert!(serde_json::from_str::<MarkedPathBuf<Absolute>>(r#"{"path":"documents","marker":"absolute"}"#).is_err());
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+### Stripping a base and normalizing lexically
+
+`strip_prefix` removes a base directory and returns the remainder as a
+`MarkedPathBuf<Relative>`, so display-relative paths stay type-checked
+instead of degrading to `PathBuf`. `normalize_lexical` resolves `.` and
+`..` segments without touching the filesystem; at a root the `..` clamps,
+and the marker is preserved.
+
+```rust
+use marked_path::{Absolute, MarkedPathBuf, MarkedPathAccess, Relative};
+
+let abs = MarkedPathBuf::<Absolute>::new("/home/user/docs")?;
+
+// The remainder of the strip is a typed relative path.
+let rel: MarkedPathBuf<Relative> = abs.strip_prefix("/home/user")?;
+assert_eq!(rel.as_path(), std::path::Path::new("docs"));
+
+// Stripping a base the path does not start with is an error.
+assert!(abs.strip_prefix("/elsewhere").is_err());
+
+// Dot segments resolve lexically — no filesystem access.
+let messy = MarkedPathBuf::<Absolute>::new("/a/b/../c")?;
+assert_eq!(messy.normalize_lexical().as_path(), std::path::Path::new("/a/c"));
+# Ok::<(), marked_path::PathError>(())
+```
+
 ## License
 
 [LGPL-3.0-or-later](https://www.gnu.org/licenses/lgpl-3.0.en.html)

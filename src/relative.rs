@@ -131,7 +131,7 @@ impl MarkedPathBuf<Relative> {
 /// `C:foo` has a prefix but no root, so `is_relative` accepts it, yet on
 /// Windows it resolves against the *current drive's* working directory rather
 /// than the process working directory.
-fn is_relative_path(path: &Path) -> bool {
+pub(crate) fn is_relative_path(path: &Path) -> bool {
     path.is_relative() && !has_drive_prefix(path)
 }
 

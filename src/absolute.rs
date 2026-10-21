@@ -85,6 +85,27 @@ impl MarkedPathBuf<Absolute> {
         self.path.set_file_name(file_name);
     }
 
+    /// Strips `base` from this path, returning the remainder as a
+    /// [`Relative`] path.
+    ///
+    /// The strip is component-wise, so `/a/b` stripped of `/a` is `b`, and a
+    /// path equal to its own base strips to the empty relative path.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PathError::PrefixMismatch`] if this path does not start
+    /// with `base`.
+    pub fn strip_prefix(
+        &self,
+        base: impl AsRef<Path>,
+    ) -> Result<MarkedPathBuf<Relative>, PathError> {
+        let stripped = self
+            .path
+            .strip_prefix(base)
+            .map_err(|_| PathError::PrefixMismatch)?;
+        MarkedPathBuf::<Relative>::new(stripped)
+    }
+
     /// Returns a new owned [`MarkedPathBuf`] with the file name replaced.
     ///
     /// This is infallible for absolute paths because even if an absolute file
@@ -175,6 +196,27 @@ impl<'a> MarkedPath<'a, Absolute> {
             path: self.path.with_file_name(file_name),
             _marker: PhantomData,
         }
+    }
+
+    /// Strips `base` from this path, returning the remainder as a new owned
+    /// [`Relative`] path.
+    ///
+    /// The strip is component-wise, so `/a/b` stripped of `/a` is `b`, and a
+    /// path equal to its own base strips to the empty relative path.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PathError::PrefixMismatch`] if this path does not start
+    /// with `base`.
+    pub fn strip_prefix(
+        &self,
+        base: impl AsRef<Path>,
+    ) -> Result<MarkedPathBuf<Relative>, PathError> {
+        let stripped = self
+            .path
+            .strip_prefix(base)
+            .map_err(|_| PathError::PrefixMismatch)?;
+        MarkedPathBuf::<Relative>::new(stripped)
     }
 }
 
@@ -386,6 +428,129 @@ mod tests {
         let abs_name = if cfg!(windows) { r"D:\other" } else { "/other" };
         let result = absolute.with_file_name(abs_name);
         assert!(result.path.is_absolute());
+    }
+
+    #[rstest]
+    fn strip_prefix_returns_relative_remainder() {
+        // Given an absolute path under a base directory.
+        let abs = if cfg!(windows) {
+            MarkedPathBuf::<Absolute>::new(r"C:\base\sub\file.txt").unwrap()
+        } else {
+            MarkedPathBuf::<Absolute>::new("/base/sub/file.txt").unwrap()
+        };
+        let base = if cfg!(windows) { r"C:\base" } else { "/base" };
+
+        // When stripping the base.
+        let result = abs.strip_prefix(base);
+
+        // Then the remainder is a typed relative path.
+        let rel = result.unwrap();
+        let expected = ["sub", "file.txt"].join(std::path::MAIN_SEPARATOR_STR);
+        assert_eq!(rel.as_path(), Path::new(&expected));
+    }
+
+    #[rstest]
+    fn strip_prefix_rejects_out_of_base_path() {
+        // Given an absolute path outside the base directory.
+        let abs = if cfg!(windows) {
+            MarkedPathBuf::<Absolute>::new(r"C:\base\file.txt").unwrap()
+        } else {
+            MarkedPathBuf::<Absolute>::new("/base/file.txt").unwrap()
+        };
+
+        // When stripping a base the path does not start with.
+        let result = abs.strip_prefix("/elsewhere");
+
+        // Then the failure names the mismatch.
+        assert!(matches!(result.unwrap_err(), PathError::PrefixMismatch));
+    }
+
+    #[rstest]
+    fn strip_prefix_rejects_base_longer_than_path() {
+        // Given an absolute path with a base that extends beyond it.
+        let abs = if cfg!(windows) {
+            MarkedPathBuf::<Absolute>::new(r"C:\base").unwrap()
+        } else {
+            MarkedPathBuf::<Absolute>::new("/base").unwrap()
+        };
+        let long_base = if cfg!(windows) {
+            r"C:\base\deeper"
+        } else {
+            "/base/deeper"
+        };
+
+        // When stripping the longer base.
+        let result = abs.strip_prefix(long_base);
+
+        // Then the strip fails with the same mismatch error.
+        assert!(matches!(result.unwrap_err(), PathError::PrefixMismatch));
+    }
+
+    #[rstest]
+    fn strip_prefix_of_self_yields_empty_relative() {
+        // Given an absolute path.
+        let abs = if cfg!(windows) {
+            MarkedPathBuf::<Absolute>::new(r"C:\base").unwrap()
+        } else {
+            MarkedPathBuf::<Absolute>::new("/base").unwrap()
+        };
+        let base = if cfg!(windows) { r"C:\base" } else { "/base" };
+
+        // When stripping the path by itself.
+        let result = abs.strip_prefix(base);
+
+        // Then the result is the empty relative path, std-consistent.
+        assert_eq!(
+            result.unwrap().as_path(),
+            Path::new(""),
+            "stripping a path by itself should yield the empty relative path"
+        );
+    }
+
+    #[rstest]
+    fn borrowed_strip_prefix_matches_owned() {
+        // Given a borrowed view of an absolute path.
+        let abs = if cfg!(windows) {
+            MarkedPathBuf::<Absolute>::new(r"C:\base\file.txt").unwrap()
+        } else {
+            MarkedPathBuf::<Absolute>::new("/base/file.txt").unwrap()
+        };
+        let base = if cfg!(windows) { r"C:\base" } else { "/base" };
+
+        // When stripping the base from the borrowed view.
+        let result = abs.as_marked_path().strip_prefix(base);
+
+        // Then it behaves identically to the owned strip.
+        let rel = result.unwrap();
+        assert_eq!(rel.as_path(), Path::new("file.txt"));
+    }
+
+    #[cfg(windows)]
+    #[rstest]
+    fn strip_prefix_accepts_forward_slash_base_on_windows() {
+        // Given an absolute path and a base written with forward slashes.
+        let abs = MarkedPathBuf::<Absolute>::new(r"C:\base\file.txt").unwrap();
+
+        // When stripping the forward-slash base.
+        let result = abs.strip_prefix("C:/base");
+
+        // Then the strip succeeds and the remainder uses the platform
+        // separator, per the Relative constructor's contract.
+        let rel = result.unwrap();
+        assert_eq!(rel.as_path(), Path::new("file.txt"));
+    }
+
+    #[cfg(not(windows))]
+    #[rstest]
+    fn strip_prefix_accepts_forward_slash_base_on_unix() {
+        // Given an absolute path and a base written with forward slashes.
+        let abs = MarkedPathBuf::<Absolute>::new("/base/file.txt").unwrap();
+
+        // When stripping the forward-slash base.
+        let result = abs.strip_prefix("/base");
+
+        // Then the strip succeeds.
+        assert_eq!(result.unwrap().as_path(), Path::new("file.txt"));
     }
 
     #[rstest]

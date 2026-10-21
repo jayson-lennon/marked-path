@@ -38,7 +38,7 @@
 //!   filesystem correctly, but they never compare equal to a user-built path,
 //!   so they are rewritten to their classic equivalents.
 
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 /// The classic Win32 path limit, in UTF-16 code units, including the
 /// terminating NUL. Plain (non-verbatim) paths of 260 or more units cannot be
@@ -92,6 +92,42 @@ pub(crate) fn has_drive_prefix(path: &Path) -> bool {
     bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':'
 }
 
+/// Removes `.` segments and resolves `..` segments lexically.
+///
+/// The rules, applied per component of [`Path::components`]:
+///
+/// - `.` is dropped.
+/// - `..` pops a preceding normal component; it is **dropped at a root**
+///   (clamped — a root has no parent, so `/../x` normalizes to `/x`) and
+///   **kept** when there is nothing to pop in a relative path (`../a` stays
+///   `../a`).
+/// - Root and Windows prefix components are preserved as-is.
+///
+/// This is purely lexical: no filesystem access, so symlinks are neither
+/// resolved nor detected.
+pub(crate) fn normalize_lexical_path(path: &Path) -> PathBuf {
+    let mut components: Vec<Component<'_>> = Vec::new();
+
+    for component in path.components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => match components.last() {
+                Some(Component::Normal(_)) => {
+                    components.pop();
+                }
+                Some(Component::RootDir | Component::Prefix(_)) => {}
+                _ => components.push(component),
+            },
+            _ => components.push(component),
+        }
+    }
+
+    components
+        .into_iter()
+        .map(Component::as_os_str)
+        .collect::<PathBuf>()
+}
+
 /// Strips the Windows `\\?\` verbatim prefix from a canonicalized path.
 ///
 /// Transforms the two verbatim forms [`std::fs::canonicalize`] produces on
@@ -111,7 +147,14 @@ pub(crate) fn has_drive_prefix(path: &Path) -> bool {
 /// - Non-UTF-8-representable paths, which cannot be rebuilt safely here.
 ///
 /// On non-Windows platforms this is the identity function.
-pub(crate) fn strip_verbatim_prefix(path: PathBuf) -> PathBuf {
+///
+/// # Example
+///
+/// ```
+/// let stripped = marked_path::strip_verbatim_prefix(std::path::PathBuf::from("/etc/hosts"));
+/// assert_eq!(stripped, std::path::PathBuf::from("/etc/hosts"));
+/// ```
+pub fn strip_verbatim_prefix(path: PathBuf) -> PathBuf {
     #[cfg(windows)]
     {
         strip_verbatim_windows(path)
@@ -241,5 +284,33 @@ mod tests {
 
         // Then no forward slash survives.
         assert_eq!(normalized, PathBuf::from(r"a\b\c.txt"));
+    }
+
+    #[cfg(windows)]
+    #[rstest::rstest]
+    #[test]
+    fn lexical_normalization_preserves_a_drive_prefix_and_resolves_within_it() {
+        // Given a drive-relative path with a `..` segment.
+        let path = Path::new(r"C:foo\..\bar");
+
+        // When normalizing it lexically.
+        let normalized = normalize_lexical_path(path);
+
+        // Then the drive prefix is preserved and the `..` resolves within
+        // the drive-relative path.
+        assert_eq!(normalized, PathBuf::from(r"C:bar"));
+    }
+
+    #[rstest::rstest]
+    #[test]
+    fn lexical_normalization_clamps_parent_at_the_root() {
+        // Given an absolute path climbing past its own root.
+        let path = Path::new("/x/../../y");
+
+        // When normalizing it lexically.
+        let normalized = normalize_lexical_path(path);
+
+        // Then the `..` beyond the root is dropped, not kept.
+        assert_eq!(normalized, PathBuf::from("/y"));
     }
 }

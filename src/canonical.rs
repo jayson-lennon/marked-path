@@ -13,6 +13,7 @@
 // You should have received a copy of the GNU Lesser General Public License
 // along with this program; if not, see <https://opensource.org/license/lgpl-3-0>.
 
+use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
 use std::ops::Deref;
@@ -49,8 +50,14 @@ use crate::path_access::{MarkedPathAccess, PathWrapper};
 /// println!("Canonical path: {}", canonical.as_path().display());
 /// # Ok::<(), marked_path::PathError>(())
 /// ```
-#[derive(Debug, PartialOrd, Ord)]
+#[derive(PartialOrd, Ord)]
 pub struct CanonicalPath(MarkedPathBuf<Absolute>);
+
+impl fmt::Debug for CanonicalPath {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Canonical({:?})", self.0.as_path())
+    }
+}
 
 impl Clone for CanonicalPath {
     fn clone(&self) -> Self {
@@ -158,6 +165,17 @@ impl AsRef<Path> for CanonicalPath {
     }
 }
 
+/// Dereferences to the underlying [`Path`], matching the marked path types,
+/// so `CanonicalPath` can be used wherever a path is expected without an
+/// explicit conversion.
+impl Deref for CanonicalPath {
+    type Target = Path;
+
+    fn deref(&self) -> &Path {
+        self.as_path()
+    }
+}
+
 impl From<CanonicalPath> for PathBuf {
     fn from(value: CanonicalPath) -> Self {
         value.into_inner()
@@ -169,6 +187,50 @@ mod tests {
     use super::*;
     use rstest::rstest;
     use tempfile::NamedTempFile;
+
+    #[rstest]
+    fn canonical_path_debug_prints_the_canonical_marker() {
+        // Given a canonical path to an existing file.
+        let temp_file = NamedTempFile::new().unwrap();
+        let canonical = CanonicalPath::from_path(temp_file.path()).unwrap();
+
+        // When formatting it with Debug.
+        let text = format!("{canonical:?}");
+
+        // Then the Canonical marker leads and the path follows in Path's own
+        // quoted form.
+        let inner = format!("{:?}", canonical.as_path());
+        assert_eq!(text, format!("Canonical({inner})"));
+    }
+
+    #[rstest]
+    fn canonical_path_derefs_to_path_methods() {
+        // Given a canonical path to an existing file.
+        let temp_file = NamedTempFile::new().unwrap();
+        let canonical = CanonicalPath::from_path(temp_file.path()).unwrap();
+
+        // When calling Path methods by dot-call, through Deref.
+        // Then they resolve and agree with the explicit as_path results.
+        assert_eq!(canonical.file_name(), canonical.as_path().file_name());
+        assert_eq!(
+            canonical.parent().map(|p| p.as_path().to_path_buf()),
+            canonical.as_path().parent().map(Path::to_path_buf)
+        );
+        assert_eq!(canonical.as_os_str(), canonical.as_path().as_os_str());
+        assert_eq!(&*canonical, canonical.as_path());
+    }
+
+    #[rstest]
+    fn strip_verbatim_prefix_is_the_identity_off_windows() {
+        // Given a plain path on a platform without verbatim prefixes.
+        let path = std::path::PathBuf::from("/etc/hosts");
+
+        // When stripping.
+        let stripped = crate::normalize::strip_verbatim_prefix(path.clone());
+
+        // Then the path is returned unchanged.
+        assert_eq!(stripped, path);
+    }
 
     #[rstest]
     fn canonical_path_from_existing_file() {

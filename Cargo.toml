@@ -1,6 +1,6 @@
 [package]
 name = "marked-path"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2024"
 description = "Type-safe path wrappers with compile-time absolute/relative guarantees"
 license = "LGPL-3.0-or-later"
@@ -26,9 +26,10 @@ single_match_else = "allow"
 wildcard_imports = "allow"
 
 [dependencies]
-serde = { version = "1.0.229", features = ["derive"] }
+serde = "1.0.229"
 wherror = "2.3.1"
 
 [dev-dependencies]
 rstest = "0.28"
+serde_json = "1.0.145"
 tempfile = "3.26.0"

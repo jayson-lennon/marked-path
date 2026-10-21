@@ -38,6 +38,7 @@
 mod absolute;
 mod canonical;
 mod marked_path;
+mod marker;
 mod normalize;
 mod path_access;
 mod relative;
@@ -45,5 +46,6 @@ mod relative;
 pub use absolute::Absolute;
 pub use canonical::CanonicalPath;
 pub use marked_path::{MarkedAncestors, MarkedPath, MarkedPathBuf, PathError};
+pub use normalize::strip_verbatim_prefix;
 pub use path_access::MarkedPathAccess;
 pub use relative::Relative;
