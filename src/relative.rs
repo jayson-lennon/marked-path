@@ -102,6 +102,38 @@ impl MarkedPathBuf<Relative> {
         }
     }
 
+    /// Joins this relative path with every segment in `parts`, in order,
+    /// returning a new `MarkedPathBuf<Relative>`.
+    ///
+    /// A multi-segment chain in one call — `base.join_all(["a", "b", name])`
+    /// instead of three `join` calls — so a chain of names costs one result
+    /// instead of one per link. Segments are joined one at a time, keeping
+    /// every separator native (see [`join`](Self::join)).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PathError::NotRelative`] if the joined result is not
+    /// relative or carries a Windows drive prefix (an absolute segment
+    /// replaces the base, per [`Path::join`](std::path::Path::join)
+    /// semantics).
+    pub fn join_all<I, P>(&self, parts: I) -> Result<MarkedPathBuf<Relative>, PathError>
+    where
+        I: IntoIterator<Item = P>,
+        P: AsRef<Path>,
+    {
+        let mut joined = self.path.clone();
+        for part in parts {
+            joined = joined.join(part);
+            if !is_relative_path(&joined) {
+                return Err(PathError::NotRelative);
+            }
+        }
+        Ok(MarkedPathBuf {
+            path: normalize_separators(&joined),
+            _marker: PhantomData,
+        })
+    }
+
     /// Updates [`self.file_name`](Path::file_name) to the given file name.
     ///
     /// # Errors
@@ -222,6 +254,38 @@ impl<'a> MarkedPath<'a, Relative> {
             path: self.path.join(other.path),
             _marker: PhantomData,
         }
+    }
+
+    /// Joins this relative path with every segment in `parts`, in order,
+    /// returning a new `MarkedPathBuf<Relative>`.
+    ///
+    /// A multi-segment chain in one call — `base.join_all(["a", "b", name])`
+    /// instead of three `join` calls — so a chain of names costs one result
+    /// instead of one per link. Segments are joined one at a time, keeping
+    /// every separator native (see [`join`](Self::join)).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PathError::NotRelative`] if the joined result is not
+    /// relative or carries a Windows drive prefix (an absolute segment
+    /// replaces the base, per [`Path::join`](std::path::Path::join)
+    /// semantics).
+    pub fn join_all<I, P>(&self, parts: I) -> Result<MarkedPathBuf<Relative>, PathError>
+    where
+        I: IntoIterator<Item = P>,
+        P: AsRef<Path>,
+    {
+        let mut joined = self.path.to_path_buf();
+        for part in parts {
+            joined = joined.join(part);
+            if !is_relative_path(&joined) {
+                return Err(PathError::NotRelative);
+            }
+        }
+        Ok(MarkedPathBuf {
+            path: normalize_separators(&joined),
+            _marker: PhantomData,
+        })
     }
 
     /// Canonicalizes this relative path, returning a [`CanonicalPath`].
@@ -372,6 +436,67 @@ mod tests {
         let other = MarkedPathBuf::<Relative>::new(PathBuf::from("subdir/file.txt")).unwrap();
         base.push(&other.as_marked_path());
         assert_eq!(base.as_path(), std::path::Path::new("base/subdir/file.txt"));
+    }
+
+    #[rstest]
+    fn join_all_chains_multiple_segments_owned() {
+        let base = MarkedPathBuf::<Relative>::new(PathBuf::from("base")).unwrap();
+
+        let result = base.join_all(["subdir", "deeper", "file.txt"]);
+
+        assert!(result.is_ok());
+        assert_eq!(
+            result.unwrap().as_path(),
+            std::path::Path::new("base/subdir/deeper/file.txt")
+        );
+    }
+
+    #[rstest]
+    fn join_all_chains_multiple_segments_borrowed() {
+        let base = MarkedPathBuf::<Relative>::new(PathBuf::from("base")).unwrap();
+
+        let result = base.as_marked_path().join_all(["subdir", "file.txt"]);
+
+        assert!(result.is_ok());
+        assert_eq!(
+            result.unwrap().as_path(),
+            std::path::Path::new("base/subdir/file.txt")
+        );
+    }
+
+    #[rstest]
+    fn join_all_rejects_an_absolute_segment() {
+        let base = MarkedPathBuf::<Relative>::new(PathBuf::from("base")).unwrap();
+        let absolute = if cfg!(windows) { r"C:\other" } else { "/other" };
+
+        let result = base.join_all(["subdir", absolute, "file.txt"]);
+
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), PathError::NotRelative));
+    }
+
+    #[rstest]
+    fn join_all_accepts_an_empty_segment_list() {
+        let base = MarkedPathBuf::<Relative>::new(PathBuf::from("base")).unwrap();
+
+        let result = base.join_all(Vec::<&str>::new());
+
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().as_path(), base.as_path());
+    }
+
+    #[rstest]
+    fn join_all_accepts_an_iterator_of_owned_paths() {
+        let base = MarkedPathBuf::<Relative>::new(PathBuf::from("base")).unwrap();
+        let parts = vec![PathBuf::from("subdir"), PathBuf::from("file.txt")];
+
+        let result = base.join_all(parts);
+
+        assert!(result.is_ok());
+        assert_eq!(
+            result.unwrap().as_path(),
+            std::path::Path::new("base/subdir/file.txt")
+        );
     }
 
     #[rstest]

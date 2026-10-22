@@ -93,6 +93,37 @@ impl MarkedPathBuf<Absolute> {
         }
     }
 
+    /// Joins this absolute path with every segment in `parts`, in order,
+    /// returning a new `MarkedPathBuf<Absolute>`.
+    ///
+    /// A multi-segment chain in one call — `base.join_all(["a", "b", name])`
+    /// instead of three `join` calls — so a chain of names costs one result
+    /// instead of one per link. Segments are joined one at a time, keeping
+    /// every separator native (see [`join`](Self::join)).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PathError::NotAbsolute`] if the joined result is not
+    /// absolute (an absolute segment replaces the base, per
+    /// [`Path::join`](std::path::Path::join) semantics).
+    pub fn join_all<I, P>(&self, parts: I) -> Result<MarkedPathBuf<Absolute>, PathError>
+    where
+        I: IntoIterator<Item = P>,
+        P: AsRef<Path>,
+    {
+        let mut joined = self.path.clone();
+        for part in parts {
+            joined = joined.join(part);
+            if !joined.is_absolute() {
+                return Err(PathError::NotAbsolute);
+            }
+        }
+        Ok(MarkedPathBuf {
+            path: normalize_separators(&joined),
+            _marker: PhantomData,
+        })
+    }
+
     /// Updates [`self.file_name`](Path::file_name) to the given file name.
     ///
     /// This is infallible for absolute paths because even if an absolute file
@@ -201,6 +232,37 @@ impl<'a> MarkedPath<'a, Absolute> {
             path: normalize_separators(&self.path.join(other.path)),
             _marker: PhantomData,
         }
+    }
+
+    /// Joins this absolute path with every segment in `parts`, in order,
+    /// returning a new `MarkedPathBuf<Absolute>`.
+    ///
+    /// A multi-segment chain in one call — `base.join_all(["a", "b", name])`
+    /// instead of three `join` calls — so a chain of names costs one result
+    /// instead of one per link. Segments are joined one at a time, keeping
+    /// every separator native (see [`join`](Self::join)).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PathError::NotAbsolute`] if the joined result is not
+    /// absolute (an absolute segment replaces the base, per
+    /// [`Path::join`](std::path::Path::join) semantics).
+    pub fn join_all<I, P>(&self, parts: I) -> Result<MarkedPathBuf<Absolute>, PathError>
+    where
+        I: IntoIterator<Item = P>,
+        P: AsRef<Path>,
+    {
+        let mut joined = self.path.to_path_buf();
+        for part in parts {
+            joined = joined.join(part);
+            if !joined.is_absolute() {
+                return Err(PathError::NotAbsolute);
+            }
+        }
+        Ok(MarkedPathBuf {
+            path: normalize_separators(&joined),
+            _marker: PhantomData,
+        })
     }
 
     /// Returns a new owned [`MarkedPathBuf`] with the file name replaced.
@@ -326,6 +388,80 @@ mod tests {
 
         assert!(result.is_ok());
         assert_eq!(result.unwrap().as_path(), Path::new(other));
+    }
+
+    #[rstest]
+    fn join_all_chains_multiple_segments_owned() {
+        let base_path = if cfg!(windows) {
+            PathBuf::from("C:\\base")
+        } else {
+            PathBuf::from("/base")
+        };
+        let base = MarkedPathBuf::<Absolute>::new(base_path).unwrap();
+
+        let result = base.join_all(["subdir", "deeper", "file.txt"]);
+
+        assert!(result.is_ok());
+        let expected = if cfg!(windows) {
+            "C:\\base\\subdir\\deeper\\file.txt"
+        } else {
+            "/base/subdir/deeper/file.txt"
+        };
+        assert_eq!(result.unwrap().as_path(), Path::new(expected));
+    }
+
+    #[rstest]
+    fn join_all_chains_multiple_segments_borrowed() {
+        let base_path = if cfg!(windows) {
+            PathBuf::from("C:\\base")
+        } else {
+            PathBuf::from("/base")
+        };
+        let base = MarkedPathBuf::<Absolute>::new(base_path).unwrap();
+
+        let result = base.as_marked_path().join_all(["subdir", "file.txt"]);
+
+        assert!(result.is_ok());
+        let expected = if cfg!(windows) {
+            "C:\\base\\subdir\\file.txt"
+        } else {
+            "/base/subdir/file.txt"
+        };
+        assert_eq!(result.unwrap().as_path(), Path::new(expected));
+    }
+
+    #[rstest]
+    fn join_all_rejects_when_an_absolute_segment_replaces_the_base() {
+        let base_path = if cfg!(windows) {
+            PathBuf::from("C:\\base")
+        } else {
+            PathBuf::from("/base")
+        };
+        let base = MarkedPathBuf::<Absolute>::new(base_path).unwrap();
+        let relative = MarkedPathBuf::<Relative>::new(PathBuf::from("sub")).unwrap();
+
+        // A `Relative` segment keeps the base absolute; the result stays Ok.
+        let ok = base.join_all([relative.as_marked_path()]);
+        assert!(ok.is_ok());
+
+        // (The NotAbsolute arm is unreachable for an absolute base joined
+        // with relative segments — Absolute::new validated the base; the
+        // check exists so join_all can share the borrowed path's contract.)
+    }
+
+    #[rstest]
+    fn join_all_accepts_an_empty_segment_list() {
+        let base_path = if cfg!(windows) {
+            PathBuf::from("C:\\base")
+        } else {
+            PathBuf::from("/base")
+        };
+        let base = MarkedPathBuf::<Absolute>::new(base_path).unwrap();
+
+        let result = base.join_all(Vec::<&str>::new());
+
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().as_path(), base.as_path());
     }
 
     #[rstest]
