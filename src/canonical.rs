@@ -16,7 +16,6 @@
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
-use std::ops::Deref;
 use std::path::{Path, PathBuf};
 
 use crate::absolute::Absolute;
@@ -165,17 +164,6 @@ impl AsRef<Path> for CanonicalPath {
     }
 }
 
-/// Dereferences to the underlying [`Path`], matching the marked path types,
-/// so `CanonicalPath` can be used wherever a path is expected without an
-/// explicit conversion.
-impl Deref for CanonicalPath {
-    type Target = Path;
-
-    fn deref(&self) -> &Path {
-        self.as_path()
-    }
-}
-
 impl From<CanonicalPath> for PathBuf {
     fn from(value: CanonicalPath) -> Self {
         value.into_inner()
@@ -201,23 +189,6 @@ mod tests {
         // quoted form.
         let inner = format!("{:?}", canonical.as_path());
         assert_eq!(text, format!("Canonical({inner})"));
-    }
-
-    #[rstest]
-    fn canonical_path_derefs_to_path_methods() {
-        // Given a canonical path to an existing file.
-        let temp_file = NamedTempFile::new().unwrap();
-        let canonical = CanonicalPath::from_path(temp_file.path()).unwrap();
-
-        // When calling Path methods by dot-call, through Deref.
-        // Then they resolve and agree with the explicit as_path results.
-        assert_eq!(canonical.file_name(), canonical.as_path().file_name());
-        assert_eq!(
-            canonical.parent().map(|p| p.as_path().to_path_buf()),
-            canonical.as_path().parent().map(Path::to_path_buf)
-        );
-        assert_eq!(canonical.as_os_str(), canonical.as_path().as_os_str());
-        assert_eq!(&*canonical, canonical.as_path());
     }
 
     #[rstest]

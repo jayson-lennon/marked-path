@@ -16,7 +16,6 @@
 use std::ffi::{OsStr, OsString};
 use std::fmt;
 use std::marker::PhantomData;
-use std::ops::Deref;
 use std::path::{Ancestors, Path, PathBuf};
 
 use serde::de::{self, Deserializer, IgnoredAny, MapAccess};
@@ -246,16 +245,6 @@ impl<M> fmt::Display for MarkedPathBuf<M> {
 
 impl<M> AsRef<Path> for MarkedPathBuf<M> {
     fn as_ref(&self) -> &Path {
-        &self.path
-    }
-}
-
-/// Dereferences to the underlying [`Path`], so the marked types can be used
-/// wherever a path is expected without an explicit conversion.
-impl<M> Deref for MarkedPathBuf<M> {
-    type Target = Path;
-
-    fn deref(&self) -> &Path {
         &self.path
     }
 }
@@ -572,12 +561,6 @@ mod tests {
         let path = MarkedPathBuf::<Relative>::new("some/relative/path").unwrap();
         let pathbuf: PathBuf = path.into();
         assert_eq!(pathbuf, PathBuf::from("some/relative/path"));
-    }
-
-    #[rstest]
-    fn marked_path_buf_derefs_to_path() {
-        let buf = MarkedPathBuf::<Relative>::new("a/b").unwrap();
-        assert_eq!(&*buf, std::path::Path::new("a/b"));
     }
 
     #[rstest]
