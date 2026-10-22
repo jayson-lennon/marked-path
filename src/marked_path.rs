@@ -391,16 +391,6 @@ impl<M> AsRef<Path> for MarkedPath<'_, M> {
     }
 }
 
-/// Dereferences to the underlying [`Path`], so the marked types can be used
-/// wherever a path is expected without an explicit conversion.
-impl<M> Deref for MarkedPath<'_, M> {
-    type Target = Path;
-
-    fn deref(&self) -> &Path {
-        self.path
-    }
-}
-
 impl<M> PathWrapper for MarkedPath<'_, M> {
     type Owned = MarkedPathBuf<M>;
     type Borrowed<'b>
@@ -588,13 +578,6 @@ mod tests {
     fn marked_path_buf_derefs_to_path() {
         let buf = MarkedPathBuf::<Relative>::new("a/b").unwrap();
         assert_eq!(&*buf, std::path::Path::new("a/b"));
-    }
-
-    #[rstest]
-    fn marked_path_derefs_to_path() {
-        let buf = MarkedPathBuf::<Relative>::new("a/b").unwrap();
-        let borrowed = buf.as_marked_path();
-        assert_eq!(&*borrowed, std::path::Path::new("a/b"));
     }
 
     #[rstest]

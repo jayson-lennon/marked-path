@@ -62,6 +62,24 @@ impl MarkedPathBuf<Absolute> {
         self.path.push(other.path);
     }
 
+    /// Joins this absolute path with the given path, returning a new
+    /// `MarkedPathBuf<Absolute>`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PathError::NotAbsolute`] if the joined result is not absolute.
+    pub fn join<P: AsRef<Path>>(&self, path: P) -> Result<MarkedPathBuf<Absolute>, PathError> {
+        let joined = self.path.join(path);
+        if joined.is_absolute() {
+            Ok(MarkedPathBuf {
+                path: normalize_separators(&joined),
+                _marker: PhantomData,
+            })
+        } else {
+            Err(PathError::NotAbsolute)
+        }
+    }
+
     /// Joins this absolute path with a typed relative path, returning a new
     /// `MarkedPathBuf<Absolute>`.
     ///

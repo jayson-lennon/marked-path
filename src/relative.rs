@@ -63,6 +63,32 @@ impl MarkedPathBuf<Relative> {
         self.path.push(other.path);
     }
 
+    /// Joins this relative path with the given path, returning a new
+    /// `MarkedPathBuf<Relative>`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PathError::NotRelative`] if the joined result is not relative,
+    /// or if the given path carries a Windows drive prefix (`C:`, `C:foo`).
+    pub fn join<P: AsRef<Path>>(&self, path: P) -> Result<MarkedPathBuf<Relative>, PathError> {
+        let path = path.as_ref();
+        // A drive-prefixed argument is rejected before the join: `join`
+        // would otherwise turn `C:foo` into `base/C:foo`, which reads as
+        // relative but names a different file on Windows.
+        if has_drive_prefix(path) {
+            return Err(PathError::NotRelative);
+        }
+        let joined = self.path.join(path);
+        if is_relative_path(&joined) {
+            Ok(MarkedPathBuf {
+                path: normalize_separators(&joined),
+                _marker: PhantomData,
+            })
+        } else {
+            Err(PathError::NotRelative)
+        }
+    }
+
     /// Joins this relative path with another typed relative path, returning a
     /// new `MarkedPathBuf<Relative>`.
     ///
