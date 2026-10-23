@@ -1,0 +1,76 @@
+## [0.5.0] - 2026-10-23
+
+### 🚀 Features
+
+- Normalize separators, reject drive-relative paths, strip verbatim prefixes
+- 0.4.0 - serde wire format with validate-on-read, marker Debug, typed strip_prefix, normalize_lexical, CanonicalPath Deref
+- Join_all — multi-segment join with one Result per chain
+## [0.2.1] - 2026-04-17
+
+### 🚀 Features
+
+- Add join_relative to MarkedPathBuf<Absolute> and MarkedPathBuf<Relative>
+## [0.2.0] - 2026-03-29
+
+### 📚 Documentation
+
+- Link to license
+
+### 🚜 Refactor
+
+- Extract delegated path methods into MarkedPathAccess trait
+
+### 🧪 Testing
+
+- Add coverage for From<MarkedPathBuf<M>> for PathBuf conversion
+
+### ⚙️ Miscellaneous Tasks
+
+- Fix clippy pedantic lints (elidable_lifetime_names, uninlined_format_args)
+- Bump version
+- Add release toml for cargo release command
+- Add changelog
+- Release marked-path version 0.2.0
+## [0.1.0] - 2026-03-28
+
+### 🚀 Features
+
+- Remove error-stack
+- Add justfile
+- Add PathBuf/Path method wrappers to MarkedPath
+
+### 🐛 Bug Fixes
+
+- Mutant tests
+- Remove CanonicalPath::push_path to preserve canonical invariant
+- Rename method
+- Make into_marked public
+- Change MSRV
+- Prevent set_file_name/with_file_name from breaking Relative path invariant
+- Change license to LGPL-v3
+- README updated with latest code
+
+### 📚 Documentation
+
+- Add crate-level documentation to lib.rs
+- Add doc comments to all new MarkedPath methods
+
+### 🚜 Refactor
+
+- Split types into dedicated modules
+- Genericize PathBuf parameters with Into<PathBuf>
+- Genericize from_path with AsRef<Path> bound
+- Split MarkedPath into borrowed MarkedPath and owned MarkedPathBuf
+
+### 🎨 Styling
+
+- Use where clauses for generic bounds on new constructors
+
+### 🧪 Testing
+
+- Verify empty string is accepted as a valid relative path
+
+### ⚙️ Miscellaneous Tasks
+
+- Update clippy config + prep for release
+- Clippy lints
