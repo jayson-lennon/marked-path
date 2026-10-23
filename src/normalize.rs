@@ -35,25 +35,11 @@
 //! - **Verbatim prefixes.** On Windows, [`std::fs::canonicalize`] returns
 //!   *verbatim* paths: `\\?\C:\users\jeff` for drive paths and
 //!   `\\?\UNC\server\share\…` for network shares. Those forms address the
-//!   filesystem correctly, but they never compare equal to a user-built path,
-//!   so they are rewritten to their classic equivalents.
+//!   filesystem correctly, but they never compare equal to a user-built
+//!   path, so the verbatim *disk* form is rewritten to its classic
+//!   equivalent whenever one exists.
 
 use std::path::{Component, Path, PathBuf};
-
-/// The classic Win32 path limit, in UTF-16 code units, including the
-/// terminating NUL. Plain (non-verbatim) paths of 260 or more units cannot be
-/// addressed by non-verbatim-aware APIs, so stripping the prefix there would
-/// produce a path nothing can reopen.
-#[cfg(windows)]
-const MAX_CLASSIC_PATH: usize = 260;
-
-/// The verbatim prefix Windows canonicalization produces.
-#[cfg(windows)]
-const VERBATIM_PREFIX: &str = r"\\?";
-
-/// Marker following the verbatim prefix for network-share paths.
-#[cfg(windows)]
-const UNC_MARKER: &str = r"UNC\";
 
 /// Rewrites the separators of `path` to the platform's own separator.
 ///
@@ -130,23 +116,29 @@ pub(crate) fn normalize_lexical_path(path: &Path) -> PathBuf {
 
 /// Strips the Windows `\\?\` verbatim prefix from a canonicalized path.
 ///
-/// Transforms the two verbatim forms [`std::fs::canonicalize`] produces on
-/// Windows into their classic equivalents:
+/// Transforms the verbatim *disk* form [`std::fs::canonicalize`] produces on
+/// Windows into its classic equivalent:
 ///
-/// - `\\?\C:\users\jeff` → `C:\users\jeff` (drive form)
-/// - `\\?\UNC\server\share\file` → `\\server\share\file` (network form)
+/// - `\\?\C:\users\jeff` → `C:\users\jeff`
 ///
-/// Three kinds of input are returned **unchanged**, because no safe plain
-/// form exists:
+/// The rewrite is delegated to the [`dunce`](https://docs.rs/dunce) crate,
+/// which keeps the verbatim prefix whenever no unambiguous classic form
+/// exists:
 ///
-/// - Paths whose plain form would be at or beyond the classic `MAX_PATH`
-///   limit — only the verbatim prefix lets APIs address those, so stripping
-///   would produce a path nothing can reopen.
-/// - Verbatim *device* paths (`\\?\COM1`, `\\?\PIPE\…`): there is no drive or
-///   share to expose, and stripping would fabricate a bogus relative path.
-/// - Non-UTF-8-representable paths, which cannot be rebuilt safely here.
+/// - Verbatim forms other than the disk form — network shares
+///   (`\\?\UNC\server\share\…`) and device paths (`\\?\COM1`) — have no
+///   drive to expose, so they are returned unchanged.
+/// - A plain path longer than the classic 260-unit limit (counted in both
+///   bytes and UTF-16 code units) is un-addressable without the prefix, so
+///   the verbatim form is kept.
+/// - Verbatim paths carrying components a classic path cannot — reserved
+///   DOS names (`COM1.txt`), names ending in `.` or a space, embedded
+///   `.`/`..` segments — are kept verbatim.
+/// - Non-UTF-8-representable paths cannot be rebuilt safely, so they are
+///   kept verbatim.
 ///
-/// On non-Windows platforms this is the identity function.
+/// Input without a verbatim prefix is returned unchanged. On non-Windows
+/// platforms dunce is a no-op, so this is the identity function there.
 ///
 /// # Example
 ///
@@ -155,51 +147,7 @@ pub(crate) fn normalize_lexical_path(path: &Path) -> PathBuf {
 /// assert_eq!(stripped, std::path::PathBuf::from("/etc/hosts"));
 /// ```
 pub fn strip_verbatim_prefix(path: PathBuf) -> PathBuf {
-    #[cfg(windows)]
-    {
-        strip_verbatim_windows(path)
-    }
-    #[cfg(not(windows))]
-    {
-        path
-    }
-}
-
-/// Windows implementation of [`strip_verbatim_prefix`].
-#[cfg(windows)]
-fn strip_verbatim_windows(path: PathBuf) -> PathBuf {
-    // Not representable as UTF-8: rebuilding the path would be guesswork, and
-    // the verbatim form is accepted everywhere a plain path is.
-    let Some(text) = path.to_str() else {
-        return path;
-    };
-    let Some(rest) = text.strip_prefix(VERBATIM_PREFIX) else {
-        return path;
-    };
-
-    let plain = match rest.strip_prefix(UNC_MARKER) {
-        Some(share) => format!(r"\\{share}"),
-        None if is_drive_path(rest) => rest.to_owned(),
-        None => return path,
-    };
-
-    // A plain path at or beyond the classic limit is un-addressable without
-    // the prefix; keep the verbatim form rather than emitting a broken path.
-    if plain.chars().map(char::len_utf16).sum::<usize>() >= MAX_CLASSIC_PATH {
-        return path;
-    }
-    PathBuf::from(plain)
-}
-
-/// Whether `rest` (a verbatim path minus its `\\?\` prefix) names a drive
-/// root or something under one — `C:\`, `C:\users\…`. Anything else after the
-/// prefix is a device path.
-#[cfg(windows)]
-fn is_drive_path(rest: &str) -> bool {
-    matches!(
-        rest.as_bytes(),
-        [drive, b':', _sep @ (b'\\' | b'/'), ..] if drive.is_ascii_alphabetic()
-    )
+    dunce::simplified(&path).to_path_buf()
 }
 
 #[cfg(test)]
@@ -312,5 +260,126 @@ mod tests {
 
         // Then the `..` beyond the root is dropped, not kept.
         assert_eq!(normalized, PathBuf::from("/y"));
+    }
+
+    #[rstest::rstest]
+    #[test]
+    fn strip_verbatim_prefix_is_the_identity_on_plain_unix_paths() {
+        // Given a plain absolute path with nothing to strip.
+        let path = PathBuf::from("/etc/hosts");
+
+        // When stripping the verbatim prefix.
+        let stripped = strip_verbatim_prefix(path.clone());
+
+        // Then the path is returned unchanged.
+        assert_eq!(stripped, path);
+    }
+
+    /// Contract pins for [`strip_verbatim_prefix`], asserted against dunce's
+    /// documented behavior. These cannot execute in a Linux CI environment;
+    /// they are written to be review-checkable against dunce 1.0.5's own
+    /// `safe`/`strip` test suite, from which every expectation below is
+    /// taken.
+    #[cfg(windows)]
+    mod windows_contract {
+        use super::*;
+
+        #[rstest::rstest]
+        #[test]
+        fn verbatim_drive_form_strips_to_the_classic_drive_path() {
+            // Given a short verbatim drive path.
+            let verbatim = PathBuf::from(r"\\?\C:\users\jeff");
+
+            // When stripping the verbatim prefix.
+            let stripped = strip_verbatim_prefix(verbatim);
+
+            // Then it becomes the classic drive form.
+            assert_eq!(stripped, PathBuf::from(r"C:\users\jeff"));
+        }
+
+        #[rstest::rstest]
+        #[test]
+        fn verbatim_unc_form_is_kept_verbatim() {
+            // Given a verbatim network-share path.
+            let verbatim = PathBuf::from(r"\\?\UNC\server\share\file.txt");
+
+            // When stripping the verbatim prefix.
+            let stripped = strip_verbatim_prefix(verbatim.clone());
+
+            // Then it is returned unchanged: dunce simplifies only the disk
+            // form, because a share has no drive to expose.
+            assert_eq!(stripped, verbatim);
+        }
+
+        #[rstest::rstest]
+        #[test]
+        fn verbatim_device_path_is_kept_verbatim() {
+            // Given a verbatim device path with no drive to expose.
+            let device = PathBuf::from(r"\\.\C:\notdisk");
+
+            // When stripping the verbatim prefix.
+            let stripped = strip_verbatim_prefix(device.clone());
+
+            // Then it is returned unchanged.
+            assert_eq!(stripped, device);
+        }
+
+        #[rstest::rstest]
+        #[test]
+        fn verbatim_path_with_a_reserved_dos_name_is_kept_verbatim() {
+            // Given a verbatim path whose component is a reserved DOS name.
+            let verbatim = PathBuf::from(r"\\?\C:\COM4.txt");
+
+            // When stripping the verbatim prefix.
+            let stripped = strip_verbatim_prefix(verbatim.clone());
+
+            // Then it is returned unchanged: the classic form would be
+            // reinterpreted by DOS-name handling.
+            assert_eq!(stripped, verbatim);
+        }
+
+        #[rstest::rstest]
+        #[test]
+        fn verbatim_path_over_the_classic_limit_is_kept_verbatim() {
+            // Given a verbatim drive path whose full form exceeds the classic
+            // 260-unit limit (the prefix plus a long tail).
+            let tail = "®".repeat(160);
+            let verbatim = PathBuf::from(format!(r"\\?\c:\{}\{}", tail, tail));
+
+            // When stripping the verbatim prefix.
+            let stripped = strip_verbatim_prefix(verbatim.clone());
+
+            // Then it is returned unchanged: the plain form would be
+            // un-addressable for non-verbatim-aware APIs.
+            assert_eq!(stripped, verbatim);
+        }
+
+        #[rstest::rstest]
+        #[test]
+        fn verbatim_path_under_the_classic_limit_strips() {
+            // Given a verbatim drive path whose full form fits the classic
+            // limit (dunce's own boundary test uses a 160-unit tail).
+            let tail = "®".repeat(160);
+            let verbatim = PathBuf::from(format!(r"\\?\c:\{tail}"));
+
+            // When stripping the verbatim prefix.
+            let stripped = strip_verbatim_prefix(verbatim);
+
+            // Then the classic form comes back.
+            assert_eq!(stripped, PathBuf::from(format!(r"c:\{tail}")));
+        }
+
+        #[rstest::rstest]
+        #[test]
+        fn plain_path_is_returned_unchanged_on_windows() {
+            // Given an already-plain Windows path.
+            let plain = PathBuf::from(r"C:\users\jeff");
+
+            // When stripping the verbatim prefix.
+            let stripped = strip_verbatim_prefix(plain.clone());
+
+            // Then it is returned as-is.
+            assert_eq!(stripped, plain);
+        }
     }
 }
