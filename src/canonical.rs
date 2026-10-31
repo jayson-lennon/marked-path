@@ -67,10 +67,13 @@ impl Clone for CanonicalPath {
 impl CanonicalPath {
     /// Creates a new `CanonicalPath` from a path, validating it is canonical.
     ///
-    /// On Windows, the verbatim prefix that canonicalization produces is
-    /// stripped before the canonical-form check, so a path that came out of
-    /// [`std::fs::canonicalize`] is accepted and the result compares equal to
-    /// a user-built plain path.
+    /// The canonical-form check compares the input against the
+    /// canonicalization of itself, both sides first stripped of their
+    /// Windows verbatim prefix — so a path that came out of
+    /// [`std::fs::canonicalize`] (verbatim-spelled on Windows) is accepted
+    /// exactly like a user-built plain path, while a path carrying `.` or
+    /// `..` components, or naming a symlink, is rejected: its
+    /// canonicalization differs from itself.
     ///
     /// # Errors
     ///
@@ -83,8 +86,9 @@ impl CanonicalPath {
     {
         let path = path.into();
         let canonicalized = path.canonicalize()?;
+        let input = strip_verbatim_prefix(path);
         let plain = strip_verbatim_prefix(canonicalized);
-        if plain != path {
+        if plain != input {
             return Err(PathError::NotCanonical);
         }
         Ok(Self(MarkedPathBuf {
@@ -95,16 +99,24 @@ impl CanonicalPath {
 
     /// Creates a `CanonicalPath` by canonicalizing the given path.
     ///
+    /// The canonicalize proves existence and full resolution; the result is
+    /// wrapped with the verbatim prefix stripped, so on Windows the path
+    /// compares equal to a user-built plain path.
+    ///
     /// # Errors
     ///
     /// Returns a [`PathError`] if the path cannot be canonicalized
-    /// (e.g., if it doesn't exist or if there are permission issues).
+    /// (e.g., if it doesn't exist or if there are permission issues), or if
+    /// the resolved path is not absolute (cannot occur for a
+    /// canonicalization, but the typed wrap checks it).
     pub fn from_path<P>(path: P) -> Result<Self, PathError>
     where
         P: AsRef<Path>,
     {
         let canonicalized = path.as_ref().canonicalize()?;
-        CanonicalPath::new(canonicalized)
+        Ok(Self(MarkedPathBuf::<Absolute>::new(strip_verbatim_prefix(
+            canonicalized,
+        ))?))
     }
 
     /// Consumes this `CanonicalPath` and returns the underlying [`PathBuf`].
@@ -227,9 +239,57 @@ mod tests {
         // When constructing a canonical path from that result.
         let canonical = CanonicalPath::new(canonicalized.clone());
 
-        // Then it is accepted, because the path is already in canonical form.
+        // Then it is accepted, because the path is already in canonical
+        // form, and the stored spelling is the verbatim-prefix-stripped
+        // form — the raw canonicalize output is verbatim on Windows, and
+        // storing it would break every comparison against a built path.
         assert!(canonical.is_ok());
-        assert_eq!(canonical.unwrap().as_path(), canonicalized);
+        let expected = crate::normalize::strip_verbatim_prefix(canonicalized);
+        assert_eq!(canonical.unwrap().as_path(), expected);
+    }
+
+    #[cfg(windows)]
+    #[rstest]
+    fn canonical_path_new_accepts_the_verbatim_form_canonicalize_produces() {
+        // Given the raw output of a canonicalization — verbatim-spelled on
+        // Windows, the exact input `from_path` used to feed `new` and the
+        // form the old compare could never accept.
+        let temp_file = NamedTempFile::new().unwrap();
+        let canonicalized = temp_file.path().canonicalize().unwrap();
+        assert!(
+            canonicalized
+                .to_str()
+                .is_some_and(|text| text.starts_with(r"\\?")),
+            "precondition: this platform's canonicalize produced a verbatim path"
+        );
+
+        // When constructing a canonical path from it.
+        let canonical = CanonicalPath::new(canonicalized);
+
+        // Then it is accepted, and the stored spelling is plain.
+        let canonical = canonical.unwrap();
+        assert!(
+            !canonical
+                .as_path()
+                .to_str()
+                .is_some_and(|text| text.starts_with(r"\\?"))
+        );
+    }
+
+    #[cfg(windows)]
+    #[rstest]
+    fn canonical_path_from_path_compares_equal_to_the_user_built_plain_path() {
+        // Given a real file addressed by its classic, user-built spelling.
+        let temp_file = NamedTempFile::new().unwrap();
+
+        // When canonicalizing it.
+        let canonical = CanonicalPath::from_path(temp_file.path()).unwrap();
+
+        // Then the result equals the path a user would have built — the
+        // regression: `from_path` used to fail with NotCanonical on every
+        // Windows path, because the canonical-form check compared a
+        // stripped result against a verbatim input.
+        assert_eq!(canonical.as_path(), temp_file.path());
     }
 
     #[rstest]
